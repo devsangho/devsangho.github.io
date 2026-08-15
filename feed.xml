@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
     <channel>
-        <title><![CDATA[sanghoyoon]]></title>
-        <description><![CDATA[sanghoyoon]]></description>
+        <title><![CDATA[sanghoyun]]></title>
+        <description><![CDATA[sanghoyun]]></description>
         <link>https://portfolio-devsangho.vercel.app</link>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Sat, 15 Aug 2026 08:00:05 GMT</lastBuildDate>
+        <lastBuildDate>Sat, 15 Aug 2026 08:23:55 GMT</lastBuildDate>
         <atom:link href="https://portfolio-devsangho.vercel.app/feed.xml" rel="self" type="application/rss+xml"/>
     </channel>
 </rss>
