@@ -4,7 +4,7 @@
         <description><![CDATA[sanghoyun]]></description>
         <link>https://www.devsangho.com</link>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Sat, 15 Aug 2026 08:28:57 GMT</lastBuildDate>
+        <lastBuildDate>Sat, 15 Aug 2026 08:39:30 GMT</lastBuildDate>
         <atom:link href="https://www.devsangho.com/feed.xml" rel="self" type="application/rss+xml"/>
         <item>
             <title><![CDATA[Web3 Decentralized Perpetual Exchange, Klimax]]></title>
@@ -119,6 +119,7 @@
         </item>
         <item>
             <title><![CDATA[A Second Seatbelt on Your Wrist, Flower Road]]></title>
+            <description><![CDATA[A wearable solution for preventing road rage. It reads heart rate from a smartwatch while driving to pinpoint the moments accident risk rises, then helps the driver settle down through music, voice guidance, and breathing.]]></description>
             <link>https://www.devsangho.com/posts/projects/flower-road</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/flower-road</guid>
             <pubDate>Mon, 31 Oct 2016 15:00:00 GMT</pubDate>
@@ -135,18 +136,21 @@
         </item>
         <item>
             <title><![CDATA[That Outfit From the Drama, Just Clothes]]></title>
+            <description><![CDATA[An app for tracking down the exact item worn in a drama scene, so finding it no longer means searching the show and actor's name through the hundreds of styling products one actor wears.]]></description>
             <link>https://www.devsangho.com/posts/projects/just-clothes</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/just-clothes</guid>
             <pubDate>Sat, 31 Oct 2015 15:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Mom's Heart on Your Wrist, Mom's Healing Hands]]></title>
+            <description><![CDATA[A child safety service pairing a child's smartwatch with a parent's phone. Rather than texting a bare address, it judges whether the child's location is safe from public safety data and shows it on Street View, and lets parents guide the child home or to a safe playground.]]></description>
             <link>https://www.devsangho.com/posts/projects/momhands</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/momhands</guid>
             <pubDate>Sat, 31 Oct 2015 15:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Lawmakers' Report Card in Your Hand, Watchbly]]></title>
+            <description><![CDATA[An app built to make the National Assembly legible to a generation that rarely votes. It ranks lawmakers by their legislative activity and opens up each member's committees, terms served, and bills proposed, alongside a channel to petition them by email.]]></description>
             <link>https://www.devsangho.com/posts/projects/watchbly</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/watchbly</guid>
             <category><![CDATA[watchbly]]></category>
