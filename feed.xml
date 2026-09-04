@@ -4,7 +4,7 @@
         <description><![CDATA[sanghoyun]]></description>
         <link>https://www.devsangho.com</link>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Sat, 15 Aug 2026 08:57:26 GMT</lastBuildDate>
+        <lastBuildDate>Fri, 04 Sep 2026 05:40:29 GMT</lastBuildDate>
         <atom:link href="https://www.devsangho.com/feed.xml" rel="self" type="application/rss+xml"/>
         <item>
             <title><![CDATA[Web3 Decentralized Perpetual Exchange, Klimax]]></title>
@@ -16,7 +16,7 @@
             <category><![CDATA[solidity]]></category>
             <category><![CDATA[nextjs]]></category>
             <category><![CDATA[typescript]]></category>
-            <pubDate>Sat, 10 May 2025 15:00:00 GMT</pubDate>
+            <pubDate>Sun, 11 May 2025 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Loplat Homepage]]></title>
@@ -25,21 +25,21 @@
             <guid isPermaLink="true">https://www.devsangho.com/posts/career/loplat-homepage</guid>
             <category><![CDATA[loplat]]></category>
             <category><![CDATA[homepage]]></category>
-            <pubDate>Sat, 13 Nov 2021 15:00:00 GMT</pubDate>
+            <pubDate>Sun, 14 Nov 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Back Office, Loplat Manager]]></title>
             <description><![CDATA[Developed the sole QA tool for maintaining Korea's highest-quality location data.]]></description>
             <link>https://www.devsangho.com/posts/career/loplat-manager</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/career/loplat-manager</guid>
-            <pubDate>Thu, 30 Sep 2021 15:00:00 GMT</pubDate>
+            <pubDate>Fri, 01 Oct 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Loplat Support — Press & Job Posting Management]]></title>
             <description><![CDATA[Noticed that job postings and news articles on the homepage were manually hardcoded, and proposed building a management system.]]></description>
             <link>https://www.devsangho.com/posts/career/loplat-support</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/career/loplat-support</guid>
-            <pubDate>Thu, 30 Sep 2021 15:00:00 GMT</pubDate>
+            <pubDate>Fri, 01 Oct 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Loplat Design System, Loplat UI]]></title>
@@ -49,14 +49,14 @@
             <category><![CDATA[loplat-ui]]></category>
             <category><![CDATA[react]]></category>
             <category><![CDATA[design-system]]></category>
-            <pubDate>Thu, 30 Sep 2021 15:00:00 GMT</pubDate>
+            <pubDate>Fri, 01 Oct 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Location-Based Ad Campaign Solution, Loplat X]]></title>
             <description><![CDATA[Developed campaign analytics and summary pages.]]></description>
             <link>https://www.devsangho.com/posts/career/loplat-x</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/career/loplat-x</guid>
-            <pubDate>Thu, 30 Sep 2021 15:00:00 GMT</pubDate>
+            <pubDate>Fri, 01 Oct 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Getting the Most Out of TypeScript]]></title>
@@ -65,7 +65,7 @@
             <guid isPermaLink="true">https://www.devsangho.com/posts/career/seminar-typescript</guid>
             <category><![CDATA[loplat]]></category>
             <category><![CDATA[Typescript]]></category>
-            <pubDate>Wed, 15 Sep 2021 15:00:00 GMT</pubDate>
+            <pubDate>Thu, 16 Sep 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Where Did People Visit Most This Month, Footlab]]></title>
@@ -73,7 +73,7 @@
             <link>https://www.devsangho.com/posts/career/loplat-footlab</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/career/loplat-footlab</guid>
             <category><![CDATA[loplat]]></category>
-            <pubDate>Sat, 31 Jul 2021 15:00:00 GMT</pubDate>
+            <pubDate>Sun, 01 Aug 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Creating the Loplat React Style Guide]]></title>
@@ -85,14 +85,14 @@
             <category><![CDATA[style-guide]]></category>
             <category><![CDATA[convention]]></category>
             <category><![CDATA[javascript]]></category>
-            <pubDate>Tue, 23 Mar 2021 15:00:00 GMT</pubDate>
+            <pubDate>Wed, 24 Mar 2021 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Offline Store Analytics Solution, Loplat i]]></title>
             <description><![CDATA[A project where I built data visualizations using D3.]]></description>
             <link>https://www.devsangho.com/posts/career/loplat-i</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/career/loplat-i</guid>
-            <pubDate>Sun, 29 Nov 2020 15:00:00 GMT</pubDate>
+            <pubDate>Mon, 30 Nov 2020 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Internal Newsletter That Made a Difference]]></title>
@@ -115,14 +115,14 @@
             <category><![CDATA[web]]></category>
             <category><![CDATA[frontend]]></category>
             <category><![CDATA[javascript]]></category>
-            <pubDate>Sat, 31 Dec 2016 15:00:00 GMT</pubDate>
+            <pubDate>Sun, 01 Jan 2017 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[A Second Seatbelt on Your Wrist, Flower Road]]></title>
             <description><![CDATA[A wearable solution for preventing road rage. It reads heart rate from a smartwatch while driving to pinpoint the moments accident risk rises, then helps the driver settle down through music, voice guidance, and breathing.]]></description>
             <link>https://www.devsangho.com/posts/projects/flower-road</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/flower-road</guid>
-            <pubDate>Mon, 31 Oct 2016 15:00:00 GMT</pubDate>
+            <pubDate>Tue, 01 Nov 2016 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Nego]]></title>
@@ -132,21 +132,21 @@
             <category><![CDATA[iOS]]></category>
             <category><![CDATA[nego]]></category>
             <category><![CDATA[swift]]></category>
-            <pubDate>Mon, 30 Nov 2015 15:00:00 GMT</pubDate>
+            <pubDate>Tue, 01 Dec 2015 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[That Outfit From the Drama, Just Clothes]]></title>
             <description><![CDATA[An app for tracking down the exact item worn in a drama scene, so finding it no longer means searching the show and actor's name through the hundreds of styling products one actor wears.]]></description>
             <link>https://www.devsangho.com/posts/projects/just-clothes</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/just-clothes</guid>
-            <pubDate>Sat, 31 Oct 2015 15:00:00 GMT</pubDate>
+            <pubDate>Sun, 01 Nov 2015 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Mom's Heart on Your Wrist, Mom's Healing Hands]]></title>
             <description><![CDATA[A child safety service pairing a child's smartwatch with a parent's phone. Rather than texting a bare address, it judges whether the child's location is safe from public safety data and shows it on Street View, and lets parents guide the child home or to a safe playground.]]></description>
             <link>https://www.devsangho.com/posts/projects/momhands</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/momhands</guid>
-            <pubDate>Sat, 31 Oct 2015 15:00:00 GMT</pubDate>
+            <pubDate>Sun, 01 Nov 2015 00:00:00 GMT</pubDate>
         </item>
         <item>
             <title><![CDATA[Lawmakers' Report Card in Your Hand, Watchbly]]></title>
@@ -154,7 +154,7 @@
             <link>https://www.devsangho.com/posts/projects/watchbly</link>
             <guid isPermaLink="true">https://www.devsangho.com/posts/projects/watchbly</guid>
             <category><![CDATA[watchbly]]></category>
-            <pubDate>Fri, 31 Oct 2014 15:00:00 GMT</pubDate>
+            <pubDate>Sat, 01 Nov 2014 00:00:00 GMT</pubDate>
         </item>
     </channel>
 </rss>
