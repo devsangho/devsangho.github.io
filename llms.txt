@@ -1,0 +1,50 @@
+# Sangho Yun
+
+> Personal site of Sangho Yun (윤상호), an incoming M.S. student at the Data Intelligence Lab, POSTECH (Pohang, Korea), advised by Prof. Hwanjo Yu. Research interests: Physical AI, Vision-Language-Action (VLA) models, and robotics. Previously a software engineer (Loplat, Hwahae, Kracker Labs) and research intern at SNU (DYROS Lab, Autonomous Robot Intelligence Lab) and Chung-Ang University.
+
+Canonical URL: https://www.devsangho.com
+Contact: sanghoyun@postech.ac.kr
+Profiles: https://scholar.google.com/citations?user=BZ0tnSsAAAAJ · https://github.com/devsangho · https://www.linkedin.com/in/sangho-yun-8386231bb/ · https://x.com/devsangho
+
+## Key facts
+
+- Name: Sangho Yun (Korean: 윤상호). Also published as "Sang Ho Yun".
+- Position: Incoming M.S. student in Artificial Intelligence, Data Intelligence Lab, POSTECH (from Aug 2026). Advisor: Prof. Hwanjo Yu.
+- Education: B.S. in Mechanical Engineering, Chung-Ang University (2019–2025); Sunrin Internet High School, Software (2013–2017).
+- Research areas: Physical AI, Vision-Language-Action models, robot learning, autonomous driving perception.
+
+## Publications
+
+- [GROOVE: Geometry-Guided Reduction of Operational-Space Jerk in VLA Execution](https://devsangho.github.io/GROOVE-public): Sangho Yun, Minsoo Kim, Minwoo Cho, Hwanjo Yu. Project page with method animation.
+- [Parking Slots Detection Method Using Directional Corner Points for Autonomous Parking Systems](https://www.dbpia.co.kr/journal/articleDetail?nodeId=NODE11909199): Sangho Yun, Minsu Kim, Jaeheung Park. 39th ICROS Academic Conference, Daejeon, 2024. Outstanding Paper Award for Undergraduate Students.
+- [Prosthetic Wrist Control Using Object Pose Estimation](https://jkspe.or.kr/journal/view.php?number=6981): Seong Bin Park, Sang Ho Yun, Eun Soo Shin, Tae Hwan Choi, Woo Chul Nam. J. Korean Soc. Precis. Eng., 41(5), 341–346, 2024.
+
+## Pages
+
+- [Home / CV](https://www.devsangho.com/): Publications, education, experience, news, awards.
+- [Posts](https://www.devsangho.com/posts): Case studies of products and research prototypes.
+- [RSS feed](https://www.devsangho.com/feed.xml)
+- [Sitemap](https://www.devsangho.com/sitemap.xml)
+
+## Career case studies
+
+- [Web3 Decentralized Perpetual Exchange, Klimax](https://www.devsangho.com/posts/career/klimax): Klimax is a decentralized perpetual futures exchange on the Klaytn network, leveraging an oracle-based architecture for zero price impact, low fees, and efficient liquidity.
+- [Loplat Homepage](https://www.devsangho.com/posts/career/loplat-homepage): Developed the homepage showcasing Loplat's key products, press coverage, job postings, and blog content.
+- [Back Office, Loplat Manager](https://www.devsangho.com/posts/career/loplat-manager): Developed the sole QA tool for maintaining Korea's highest-quality location data.
+- [Loplat Support — Press & Job Posting Management](https://www.devsangho.com/posts/career/loplat-support): Noticed that job postings and news articles on the homepage were manually hardcoded, and proposed building a management system.
+- [Loplat Design System, Loplat UI](https://www.devsangho.com/posts/career/loplat-ui): Proposed, built, communicated, and shipped an internal design system.
+- [Location-Based Ad Campaign Solution, Loplat X](https://www.devsangho.com/posts/career/loplat-x): Developed campaign analytics and summary pages.
+- [Getting the Most Out of TypeScript](https://www.devsangho.com/posts/career/seminar-typescript): A seminar I presented at Loplat in September 2021 to improve the team's TypeScript understanding and usage.
+- [Where Did People Visit Most This Month, Footlab](https://www.devsangho.com/posts/career/loplat-footlab): My first B2C project — from learning to deployment in just 2 weeks.
+- [Creating the Loplat React Style Guide](https://www.devsangho.com/posts/career/loplat-style-guide): The process of proposing, discussing, and adopting an internal React style guide.
+- [Offline Store Analytics Solution, Loplat i](https://www.devsangho.com/posts/career/loplat-i): A project where I built data visualizations using D3.
+- [Internal Newsletter That Made a Difference](https://www.devsangho.com/posts/career/wb-newsletter): A story about improving organizational culture through an internal newsletter while working on the operations team at Whiteblock.
+- [Affiliate Marketing Platform, Buzz](https://www.devsangho.com/posts/career/buzz): Built a platform that enables influencers to easily run affiliate marketing campaigns.
+- [Nego](https://www.devsangho.com/posts/career/nego): As an iOS developer, I built the price change graph, do-not-disturb mode, and wishlist features.
+
+## Side projects
+
+- [A Second Seatbelt on Your Wrist, Flower Road](https://www.devsangho.com/posts/projects/flower-road): A wearable solution for preventing road rage. It reads heart rate from a smartwatch while driving to pinpoint the moments accident risk rises, then helps the driver settle down through music, voice guidance, and breathing.
+- [That Outfit From the Drama, Just Clothes](https://www.devsangho.com/posts/projects/just-clothes): An app for tracking down the exact item worn in a drama scene, so finding it no longer means searching the show and actor's name through the hundreds of styling products one actor wears.
+- [Mom's Heart on Your Wrist, Mom's Healing Hands](https://www.devsangho.com/posts/projects/momhands): A child safety service pairing a child's smartwatch with a parent's phone. Rather than texting a bare address, it judges whether the child's location is safe from public safety data and shows it on Street View, and lets parents guide the child home or to a safe playground.
+- [Lawmakers' Report Card in Your Hand, Watchbly](https://www.devsangho.com/posts/projects/watchbly): An app built to make the National Assembly legible to a generation that rarely votes. It ranks lawmakers by their legislative activity and opens up each member's committees, terms served, and bills proposed, alongside a channel to petition them by email.

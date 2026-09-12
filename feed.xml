@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
     <channel>
-        <title><![CDATA[sanghoyun]]></title>
-        <description><![CDATA[sanghoyun]]></description>
+        <title><![CDATA[Sangho Yun — Posts]]></title>
+        <description><![CDATA[Case studies and write-ups by Sangho Yun on products, research prototypes, and internal tools.]]></description>
         <link>https://www.devsangho.com</link>
+        <image>
+            <url>https://www.devsangho.com/icon-512.png</url>
+            <title>Sangho Yun — Posts</title>
+            <link>https://www.devsangho.com</link>
+        </image>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Fri, 11 Sep 2026 09:06:36 GMT</lastBuildDate>
+        <lastBuildDate>Sat, 12 Sep 2026 10:11:22 GMT</lastBuildDate>
         <atom:link href="https://www.devsangho.com/feed.xml" rel="self" type="application/rss+xml"/>
+        <language><![CDATA[en]]></language>
         <item>
             <title><![CDATA[Web3 Decentralized Perpetual Exchange, Klimax]]></title>
             <description><![CDATA[Klimax is a decentralized perpetual futures exchange on the Klaytn network, leveraging an oracle-based architecture for zero price impact, low fees, and efficient liquidity.]]></description>
