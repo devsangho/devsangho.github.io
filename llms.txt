@@ -15,7 +15,7 @@ Profiles: https://scholar.google.com/citations?user=BZ0tnSsAAAAJ · https://gith
 
 ## Publications
 
-- [GROOVE: Geometry-Guided Reduction of Operational-Space Jerk in VLA Execution](https://devsangho.github.io/GROOVE-public): Sangho Yun, Minsoo Kim, Minwoo Cho, Hwanjo Yu. Project page with method animation.
+- [GROOVE: Geometry-Guided Reduction of Operational-Space Jerk in VLA Execution](https://arxiv.org/abs/2609.13695): Sangho Yun, Minsoo Kim, Minwoo Cho, Hwanjo Yu. A VLA jerk reduction method for smooth robot execution without retraining or additional VLA inference. [Project page](https://devsangho.github.io/GROOVE-public/).
 - [Parking Slots Detection Method Using Directional Corner Points for Autonomous Parking Systems](https://www.dbpia.co.kr/journal/articleDetail?nodeId=NODE11909199): Sangho Yun, Minsu Kim, Jaeheung Park. 39th ICROS Academic Conference, Daejeon, 2024. Outstanding Paper Award for Undergraduate Students.
 - [Prosthetic Wrist Control Using Object Pose Estimation](https://jkspe.or.kr/journal/view.php?number=6981): Seong Bin Park, Sang Ho Yun, Eun Soo Shin, Tae Hwan Choi, Woo Chul Nam. J. Korean Soc. Precis. Eng., 41(5), 341–346, 2024.
 
