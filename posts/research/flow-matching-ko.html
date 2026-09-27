@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flow matching: 노이즈에서 로봇 행동까지</title>
+<meta name="description" content="Flow matching의 수학적 정의부터 조건부 경로, 속도 파라미터화, 디퓨전과의 관계, π0 VLA의 action head까지 정리한 글">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+:root{
+  --paper:#FAFBFC; --card:#FFFFFF; --ink:#1A2233; --ink-2:#4F5B70; --rule:#DCE1EA;
+  --blue:#2F54C8; --green:#1F8A5B; --orange:#D2691A; --violet:#6C5FC7;
+  --hl:#FFD84A; --hl-soft:#FFF5C9; --grid:rgba(47,84,200,.075);
+  --sans:"Pretendard",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --serif:var(--sans);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0F131A; --card:#151B25; --ink:#E6EAF2; --ink-2:#A3AEC2; --rule:#2A3446;
+  --blue:#86A2F2; --green:#4CC38A; --orange:#F0994A; --violet:#A79CF0;
+  --hl:#E0B72E; --hl-soft:rgba(255,214,64,.11); --grid:rgba(134,162,242,.08); color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --paper:#0F131A; --card:#151B25; --ink:#E6EAF2; --ink-2:#A3AEC2; --rule:#2A3446;
+  --blue:#86A2F2; --green:#4CC38A; --orange:#F0994A; --violet:#A79CF0;
+  --hl:#E0B72E; --hl-soft:rgba(255,214,64,.11); --grid:rgba(134,162,242,.08); color-scheme:dark;}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.85;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:break-word}
+a{color:var(--blue);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.hero{position:relative;border-bottom:1px solid var(--rule);
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:28px 28px;overflow:hidden}
+.hero-inner{max-width:1120px;margin:0 auto;padding:72px 24px 56px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:32px;align-items:center}
+.hero h1{font-family:var(--sans);font-weight:800;font-size:clamp(44px,7vw,84px);line-height:1;letter-spacing:-.035em;margin:0 0 20px}
+.hero .sub{font-family:var(--sans);font-size:20px;line-height:1.55;color:var(--ink-2);margin:0 0 20px;max-width:30ch}
+.hero .meta{font-family:var(--sans);font-size:14px;color:var(--ink-2);margin:0}
+.hero canvas{width:100%;aspect-ratio:1.25;display:block}
+.hero .cap{font-family:var(--sans);font-size:13px;color:var(--ink-2);margin:6px 0 0;text-align:right}
+@media (max-width:820px){.hero-inner{grid-template-columns:1fr;padding:48px 20px 32px}}
+main{max-width:720px;margin:0 auto;padding:40px 22px 96px}
+h2{font-family:var(--sans);font-weight:750;font-size:30px;line-height:1.25;letter-spacing:-.02em;margin:72px 0 18px}
+h2 .n{color:var(--blue);margin-right:.35em;font-variant-numeric:tabular-nums}
+h3{font-family:var(--sans);font-weight:700;font-size:21px;line-height:1.35;margin:40px 0 10px}
+p{margin:0 0 1.15em}
+.toc{font-family:var(--sans);font-size:15.5px;line-height:1.7;border:1px solid var(--rule);border-radius:12px;padding:18px 22px;background:var(--card)}
+.toc ol{margin:6px 0 0;padding-left:22px}
+.toc a{text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.lead{font-size:19px}
+.memo{font-family:var(--sans);font-size:15.5px;line-height:1.75;margin:26px 0;padding:14px 18px 14px 18px;background:var(--hl-soft);border-left:5px solid var(--hl);border-radius:0}
+.memo b.tag{display:inline-block;font-weight:700;margin-right:8px}
+.memo p{margin:0 0 .6em}.memo p:last-child{margin:0}
+.fix{font-family:var(--sans);font-size:15.5px;line-height:1.75;margin:-14px 0 26px;padding:14px 18px;border:1px solid var(--rule);border-left:5px solid var(--green);border-radius:0;background:var(--card)}
+.fix b.tag{color:var(--green);font-weight:700;margin-right:8px}
+.fix p{margin:0 0 .6em}.fix p:last-child{margin:0}
+.key{background:var(--hl-soft);border-radius:10px;padding:4px 14px;margin:18px 0}
+.thm{border:1px solid var(--rule);border-radius:12px;padding:16px 20px;margin:22px 0;background:var(--card)}
+.thm .h{font-family:var(--sans);font-weight:700;display:block;margin-bottom:4px}
+.proof{font-size:16.5px;color:var(--ink);border-left:2px solid var(--rule);padding-left:16px;margin:0 0 22px}
+.proof .h{font-family:var(--sans);font-weight:700;font-size:15px;color:var(--ink-2)}
+.katex-display{overflow-x:auto;overflow-y:hidden;padding:4px 0}
+figure{margin:34px -40px;padding:20px;border:1px solid var(--rule);border-radius:14px;background:var(--card)}
+@media (max-width:820px){figure{margin:30px 0;padding:14px}}
+figcaption{font-family:var(--sans);font-size:14px;line-height:1.65;color:var(--ink-2);margin-top:12px}
+figcaption b{color:var(--ink);font-weight:700}
+.ctl{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:var(--sans);font-size:14px;color:var(--ink-2);margin:0 0 14px}
+.ctl input[type=range]{flex:1;min-width:150px;accent-color:var(--blue)}
+.ctl output{font-weight:700;color:var(--ink);min-width:44px;font-variant-numeric:tabular-nums}
+button{font-family:var(--sans);font-size:14px;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--ink-2)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.pair canvas{width:100%;aspect-ratio:1;display:block;border:1px solid var(--rule);border-radius:10px}
+.plab{font-family:var(--sans);font-size:14.5px;font-weight:700;margin:0 0 6px}
+.plab span{font-weight:400;color:var(--ink-2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--sans);font-size:13px;color:var(--ink-2);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.stat{font-family:var(--sans);font-size:14px;color:var(--ink-2);margin:10px 0 0}
+.stat b{color:var(--ink);font-variant-numeric:tabular-nums}
+.algo{font-family:var(--sans);font-size:15.5px;line-height:1.8;border:1px solid var(--rule);border-radius:12px;background:var(--card);padding:16px 20px;margin:22px 0}
+.algo .h{font-weight:700;display:block;margin-bottom:6px}
+.algo ol{margin:0;padding-left:22px}
+.tbl-wrap{overflow-x:auto;margin:22px 0}
+table{border-collapse:collapse;font-family:var(--sans);font-size:15px;line-height:1.55;min-width:560px;width:100%}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:700;border-bottom:2px solid var(--ink-2)}
+.refs{font-family:var(--sans);font-size:14.5px;line-height:1.7;padding-left:22px}
+.refs li{margin-bottom:6px}
+svg text{font-family:var(--sans)}
+footer{font-family:var(--sans);font-size:13.5px;color:var(--ink-2);border-top:1px solid var(--rule);margin-top:64px;padding-top:18px}
+@media (max-width:560px){body{font-size:16.5px}h2{font-size:25px}}
+details.deep{border:1px solid var(--rule);border-radius:12px;margin:20px 0 28px;background:var(--card)}
+details.deep>summary{font-family:var(--sans);font-weight:700;font-size:15.5px;padding:12px 18px;cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline}
+details.deep>summary::-webkit-details-marker{display:none}
+details.deep>summary::before{content:"+";color:var(--blue);font-weight:800;width:12px}
+details.deep[open]>summary::before{content:"−"}
+details.deep>summary span{font-weight:400;color:var(--ink-2);font-size:14px}
+details.deep .body{padding:2px 20px 14px;font-size:16.5px;border-top:1px solid var(--rule)}
+details.deep .body>*:first-child{margin-top:14px}
+.oneline{font-family:var(--sans);font-size:17px;font-weight:600;border-top:2px solid var(--ink);border-bottom:1px solid var(--rule);padding:14px 0;margin:28px 0}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div>
+      <h1>Flow<br>matching</h1>
+      <p class="sub">노이즈에서 로봇 행동까지: 조건부 경로, 속도장, 그리고 π0의 action head</p>
+      <p class="meta">VLA 스터디 노트, 2026년 9월</p>
+    </div>
+    <div>
+      <canvas id="hero" width="1000" height="800" aria-label="가우시안 노이즈 입자들이 학습된 속도장을 따라 여덟 개의 데이터 군집으로 흘러가는 애니메이션" role="img"></canvas>
+      <p class="cap">가우시안 노이즈가 속도장 v(x, t)를 따라 데이터 분포로 이동하는 모습</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<p class="lead">π0 같은 VLA는 로봇 행동을 "노이즈에서 시작해 속도를 여러 번 더해서" 만든다. 이 글은 그 과정을 제가 공부하며 정리한 필기 순서 그대로 따라간다. 먼저 로봇이 행동을 만들어내는 세 단계를 보고, 그다음 "왜 하필 속도를 예측할까?"라는 질문으로 넘어간다.</p>
+
+<p>읽는 법은 간단하다. 노란 상자는 필기 원문이고, 초록 상자는 필기를 더 정확하게 다듬은 내용이다. 증명과 유도는 <b>더 깊이</b> 상자에 접어 두었으니, 흐름만 따라가고 싶다면 건너뛰어도 본문은 이어진다. 그림은 모두 브라우저에서 직접 계산되므로 슬라이더를 움직여 보면서 읽기를 권한다.</p>
+
+<nav class="toc" aria-label="목차">
+  <b>목차</b>
+  <ol>
+    <li><a href="#s0">큰 그림: 노이즈를 행동으로 흘려보내기</a></li>
+    <li><a href="#s1">Step 1. 노이즈에서 시작하기</a></li>
+    <li><a href="#s2">Step 2. VLM으로 관측을 한 번만 읽기</a></li>
+    <li><a href="#s3">Step 3. 속도를 더해가며 적분하기</a></li>
+    <li><a href="#s4">왜 하필 속도를 예측할까?</a></li>
+    <li><a href="#s5">무엇이 좋은가</a></li>
+    <li><a href="#s6">디퓨전과 비교하면</a></li>
+    <li><a href="#s7">정리</a></li>
+  </ol>
+</nav>
+
+<h2 id="s0"><span class="n">0</span>큰 그림: 노이즈를 행동으로 흘려보내기</h2>
+
+<p>맨 위 그림을 다시 보자. 가운데 뭉쳐 있던 점들(가우시안 노이즈)이 흘러가서 여덟 개의 무리(데이터)에 도착한다. 각 점은 매 순간 "지금 위치에서 어느 방향으로 얼마나 빨리 가야 하는지"를 알려주는 화살표를 따라 움직인다. 이 화살표들의 집합을 <b>속도장</b> \(v(x,t)\)라고 부른다.</p>
+
+<p>flow matching은 한마디로 이 속도장을 신경망으로 배우는 방법이다. 속도장만 알면 노이즈에서 출발해 화살표를 따라 조금씩 이동하는 것으로 데이터를 만들 수 있다. 로봇에서는 "데이터"가 앞으로 할 행동 궤적이 된다.</p>
+
+<p>이 글에서 시간은 \(t\) 또는 \(\tau\)로 쓰고, <b>0이 노이즈, 1이 데이터(행동)</b>다. VLA 부분에서는 로봇의 제어 시각과 헷갈리지 않도록 π0 논문처럼 \(\tau\)를 쓴다.</p>
+
+<details class="deep"><summary>더 깊이 <span>ODE와 연속 방정식으로 정확히 쓰면</span></summary><div class="body">
+<p>속도장을 따라 움직이는 것은 상미분방정식(ODE)이다.</p>
+$$\frac{d}{dt}\,\psi_t(x) = v_t\big(\psi_t(x)\big),\qquad \psi_0(x)=x.$$
+<p>\(\psi_t\)를 흐름(flow)이라 한다. 노이즈 분포 \(p_0=\mathcal N(0,I)\)를 이 흐름으로 옮긴 분포를 \(p_t=[\psi_t]_\#\,p_0\)라 쓰고, 목표는 \(p_1\)이 데이터 분포 \(q\)와 같아지는 것이다.</p>
+<p>속도장과 분포의 변화는 연속 방정식으로 묶여 있다. 확률 질량은 생기거나 사라지지 않고 속도를 따라 이동할 뿐이기 때문이다.</p>
+$$\frac{\partial p_t(x)}{\partial t} + \nabla\cdot\big(p_t(x)\,v_t(x)\big) = 0.$$
+<p>이 식이 성립하면 "\(v_t\)가 \(p_t\)를 생성한다"고 말한다. 신경망으로 속도장을 정의한 이런 모델을 연속 정규화 흐름(CNF)이라 하는데, 원래는 로그우도로 학습하느라 학습 중에 ODE를 풀어야 해서 비쌌다. flow matching은 이 시뮬레이션 없이 회귀만으로 학습하는 방법이다.</p>
+</div></details>
+
+<h2 id="s1"><span class="n">1</span>Step 1. 노이즈에서 시작하기</h2>
+
+<div class="memo"><b class="tag">내 필기</b>
+<p>Step 1. 초기 노이즈 샘플링 \(\tau=0\). 아무런 의미 정보가 없는 가우시안 노이즈 \(\epsilon\sim\mathcal N(0,I)\)를 샘플링. 이 노이즈 상태가 추론의 시작점인 \(a_0=\epsilon\)가 된다.</p></div>
+
+<p>필기 그대로다. 한 가지만 덧붙이면, 로봇이 만드는 것은 한 순간의 행동 하나가 아니라 앞으로 \(H\)스텝 동안의 행동 묶음이다. 이것을 <b>action chunk</b>라 부르고, π0에서는 \(H=50\)이다.</p>
+
+$$\mathbf A_t=[\mathbf a_t,\mathbf a_{t+1},\dots,\mathbf a_{t+H-1}]\in\mathbb R^{H\times d_a}$$
+
+<p>그래서 시작점 노이즈도 이와 같은 모양의 행렬 \(\mathbf A^{0}=\epsilon\in\mathbb R^{H\times d_a}\)다. 50개 waypoint가 모두 제멋대로 흩어진 궤적이라고 생각하면 된다.</p>
+
+<h2 id="s2"><span class="n">2</span>Step 2. VLM으로 관측을 한 번만 읽기</h2>
+
+<div class="memo"><b class="tag">내 필기</b>
+<p>Step 2. VLM 백본 피처 계산 및 KV 캐싱 (1회 실행). o: 카메라 관측 이미지, ℓ: 언어 지시사항 → VLM 백본 → 시각·언어 feature. KV caching: 시각·언어 표현 ← masking → 행동 도출 (like 일방통행). 따라서 모델은 시각·언어 Key-Value(KV) 피처를 단 1회만 계산 → 메모리에 캐싱, 이후 모든 적분 스텝 재사용.</p></div>
+
+<p>π0는 두 부분으로 되어 있다. 이미지와 언어를 이해하는 큰 <b>VLM 백본</b>(PaliGemma, 약 3B)과, 행동만 전담하는 작은 <b>action expert</b>(약 300M)다. 둘은 가중치가 따로지만 transformer의 attention은 함께 쓴다.</p>
+
+<p>필기의 "일방통행"이 핵심이다. attention 마스크를 아래처럼 막아 두어서, 행동 토큰은 이미지·언어를 볼 수 있지만 이미지·언어 토큰은 행동 토큰을 볼 수 없다.</p>
+
+<figure id="fig-mask">
+  <svg id="mask-svg" viewBox="0 0 640 330" width="100%" role="img" aria-labelledby="mask-t mask-d"><title id="mask-t">π0의 블록 단위 인과 attention 마스크</title><desc id="mask-d">행은 query 토큰, 열은 key 토큰이다. 이미지와 언어 토큰은 서로만 보고, 상태 토큰은 앞 블록과 자신을 보며, 행동 토큰은 모든 토큰을 본다</desc></svg>
+  <figcaption><b>그림 1.</b> 행이 query, 열이 key다. 채워진 칸만 attention이 허용된다. 이미지·언어 블록의 행에는 뒤쪽 블록 열이 모두 비어 있으므로, 이 블록의 은닉 상태는 \(\mathbf A_t^\tau\)와 \(\tau\)에 전혀 의존하지 않는다.</figcaption>
+</figure>
+
+<p>이렇게 하면 이미지·언어 쪽 계산 결과는 행동이 어떻게 바뀌든 항상 똑같다. Step 3에서 행동을 열 번 고쳐 쓰는 동안 이 부분은 한 번도 바뀌지 않으니, 처음에 한 번만 계산해서 저장해 두고(KV 캐싱) 계속 재사용하면 된다. 무거운 3B 모델은 한 번, 가벼운 300M 모델만 열 번 돌기 때문에 빠르다.</p>
+
+<div class="fix"><b class="tag">보충</b>
+<p>막혀 있는 방향이 중요하다. 만약 이미지·언어 토큰이 행동 토큰을 볼 수 있다면, 행동이 바뀔 때마다 이미지·언어 쪽 계산도 바뀌어서 캐시를 재사용하면 틀린 답이 나온다. 마스크 덕분에 캐싱이 "근사"가 아니라 "정확히 같은 계산"이 된다. 로봇 상태 \(\mathbf q_t\)도 같은 이유로 따로 한 블록을 두어 캐시한다.</p></div>
+
+<details class="deep"><summary>더 깊이 <span>캐싱이 정확한 이유와 계산량</span></summary><div class="body">
+<p>토큰을 세 블록 \([\text{이미지, 언어}],\ [\mathbf q_t],\ [\mathbf A^\tau]\)으로 나누면, 각 블록은 자기 블록과 앞 블록에만 attend한다(블록 안에서는 양방향). 그러면 층 \(\ell\)에서 앞 블록의 은닉 상태 \(h^\ell_P\)는 앞 블록 입력만의 함수이고, 따라서 \(K^\ell_P,V^\ell_P\)도 \(\tau\)와 \(\mathbf A^\tau\)에 무관하다. 매 적분 스텝에서는 행동 토큰의 \(Q,K,V\)만 새로 계산해 \([K_P;K_A],[V_P;V_A]\)에 attend하면 전체 재계산과 수학적으로 동일하다.</p>
+<p>앞 블록 길이를 \(L_P\), 행동 토큰 수를 \(L_A=H\), 적분 스텝을 \(N\)이라 하면 VLM 가중치를 통과하는 계산은 한 번(\(O(L_P^2)\) attention), 반복되는 것은 action expert의 \(N\)번(\(O(N L_A(L_P+L_A))\))이다.</p>
+<p>행동 토큰은 각 waypoint를 선형층으로 임베딩하고, \(\tau\)의 사인파 임베딩과 합쳐 MLP를 거쳐 만든다. 출력단은 토큰마다 속도 벡터를 선형층으로 읽어낸다. 부수 효과로, 사전학습된 VLM 표현이 노이즈 섞인 행동 토큰에 오염되지 않는다.</p>
+</div></details>
+
+<h2 id="s3"><span class="n">3</span>Step 3. 속도를 더해가며 적분하기</h2>
+
+<div class="memo"><b class="tag">내 필기</b>
+<p>Step 3. 수치 적분 loop (\(\tau=0\to1\) 반복 연산). 정해진 스텝 수 \(N\)에 따라 \(\tau\)를 0~1까지 \(\Delta\tau=1/N\)씩 올리며 오일러 방법의 수치 적분 사용. ① \(a_{\tau_k}\) 현재 상태, 캐싱해둔 KV, 현재 타임스텝 \(\tau_k\)를 행동 head에 입력 ② \(v_\theta(a_{\tau_k},o,\ell,\tau_k)\) 예측 ③ \(a_{\tau_{k+1}}=a_{\tau_k}+\Delta\tau\cdot v_\theta\) ④ 최종 행동 궤적 완성(\(\tau=1\)) → Action chunk (노이즈 완전 제거).</p></div>
+
+<p>필기의 흐름이 정확하다. 오일러 방법은 "지금 속도로 \(\Delta\tau\)만큼 가 본다"를 반복하는 것이다. π0는 \(N=10\), 즉 \(\Delta\tau=0.1\)씩 열 번 움직인다.</p>
+
+<div class="key">$$\mathbf A^{\tau_{k+1}}=\mathbf A^{\tau_k}+\Delta\tau\;v_\theta(\mathbf A^{\tau_k},\mathbf o_t,\tau_k),\qquad k=0,1,\dots,N-1$$</div>
+
+<div class="algo"><span class="h">한 번의 추론을 정리하면</span>
+<ol>
+<li>이미지·언어·상태를 VLM에 한 번 통과시키고 KV를 캐시한다. (Step 2)</li>
+<li>\(\mathbf A^{0}=\epsilon\sim\mathcal N(0,I)\)을 뽑는다. (Step 1)</li>
+<li>열 번 반복: action expert가 속도를 예측하고, \(0.1\times\)속도만큼 행동을 이동시킨다. (Step 3)</li>
+<li>\(\mathbf A^{1}\)이 action chunk다. 로봇은 앞부분을 실행하고, 새 관측으로 1번부터 다시 한다.</li>
+</ol></div>
+
+<details class="deep"><summary>더 깊이 <span>경계 조건과 코드의 시간 규약</span></summary><div class="body">
+<p>마지막 스텝에서 모델에 넣는 시각은 \(\tau_{N-1}=1-\Delta\tau\)라서, 적분 중에 \(\tau=1\)에서 모델을 평가하는 일은 없다. 뒤에서 보겠지만 속도장은 \(\tau\to1\)에서 \(1/(1-\tau)\) 꼴로 특이해지므로 이 점이 중요하다.</p>
+<p>공개 구현 openpi는 시간 방향이 이 글과 반대다. \(t=1\)이 노이즈, \(t=0\)이 행동이며 \(x_t=t\,\epsilon+(1-t)\mathbf A\), 목표 속도는 \(\epsilon-\mathbf A\), 샘플링은 \(t=1\)에서 \(dt=-1/N\)으로 내려간다. \(t=1-\tau\)로 바꾸고 부호를 뒤집으면 완전히 같은 식이지만, 논문 식과 코드를 섞어 옮기면 부호 하나로 동작하지 않게 된다.</p>
+</div></details>
+
+<h2 id="s4"><span class="n">4</span>왜 하필 속도를 예측할까?</h2>
+
+<div class="memo"><b class="tag">내 필기</b>
+<p>\(a_\tau=\tau a+(1-\tau)\epsilon\) … 1차 직선 보간. \(\dfrac{da_\tau}{d\tau}=a-\epsilon=u\). 노이즈 \(\epsilon\) 지점에서 정답 위치 \(a\)까지 일정한 속도로 똑바로 걸어갈 때, 나아가야 할 방향과 속도 벡터가 바로 \(u=a-\epsilon\). ∴ 모델 \(v_\theta\)는 현재 위치 \(a_\tau\)와 카메라/언어 정보가 주어졌을 때 목표 속도인 \(u=a-\epsilon\)을 맞추도록 학습됨.</p></div>
+
+<p>이제 Step 3에서 쓴 \(v_\theta\)를 어떻게 학습하는지다. 필기의 설명이 학습 방법 그 자체다. 시연 데이터에서 정답 행동 \(\mathbf A\)를 하나 꺼내고, 노이즈 \(\epsilon\)과 시각 \(\tau\)를 뽑아 둘 사이의 직선 위 한 점을 만든다. 그 점에서 모델이 예측한 속도가 \(\mathbf A-\epsilon\)과 같아지도록 오차를 줄인다.</p>
+
+<div class="key">$$\mathbf A^\tau=\tau\,\mathbf A+(1-\tau)\,\epsilon,\qquad
+\mathcal L(\theta)=\mathbb E\,\big\lVert v_\theta(\mathbf A^\tau,\mathbf o_t,\tau)-(\mathbf A-\epsilon)\big\rVert^2$$</div>
+
+<p>ODE를 풀 필요도, 확률을 계산할 필요도 없다. 그냥 회귀다. 이것이 flow matching이 학습하기 쉬운 이유다.</p>
+
+<h3>그런데 한 가지 함정이 있다</h3>
+
+<p>같은 점을 지나는 직선이 하나가 아니라는 것이다. 서로 다른 (노이즈, 정답) 쌍의 직선이 같은 시각에 같은 점을 지날 수 있고, 그 직선들은 방향이 다르다. 한 점에서 정답이 여러 개면, 오차 제곱을 줄이는 모델은 결국 <b>그 정답들의 평균</b>을 출력하게 된다.</p>
+
+<p>그래서 모델이 실제로 배우는 속도는 개별 직선의 속도가 아니라 평균 속도다. 아래 그림의 왼쪽은 학습에 쓰는 직선들이고, 오른쪽은 이것들이 평균되어 만들어진 속도장과 그것을 따라간 궤적이다. 슬라이더를 움직여 보면 오른쪽 궤적은 직선이 아니라 휘어지고, 서로 절대 교차하지 않는다.</p>
+
+<figure id="fig-cond">
+  <div class="ctl">
+    <button type="button" id="c-play">재생</button>
+    <label for="c-t">시각 t</label>
+    <input type="range" id="c-t" min="0" max="1" step="0.005" value="0">
+    <output id="c-tout" for="c-t">0.00</output>
+    <button type="button" id="c-new">다시 샘플링</button>
+  </div>
+  <div class="pair">
+    <div><p class="plab">학습에 쓰는 조건부 경로 <span>직선, 서로 교차</span></p><canvas id="c-left" width="620" height="620" aria-label="노이즈와 데이터 쌍을 잇는 직선 경로"></canvas></div>
+    <div><p class="plab">주변 속도장과 ODE 궤적 <span>곡선, 교차하지 않음</span></p><canvas id="c-right" width="620" height="620" aria-label="주변 속도장 화살표와 적분 궤적"></canvas></div>
+  </div>
+  <div class="legend"><span><i style="background:var(--violet)"></i>노이즈 x₀</span><span><i style="background:var(--green)"></i>데이터 x₁</span><span><i style="background:var(--orange)"></i>현재 위치 xₜ</span><span><i style="background:var(--ink-2)"></i>주변 속도장</span></div>
+  <figcaption><b>그림 2.</b> 여덟 개 군집으로 이루어진 2차원 데이터. 왼쪽은 독립 결합에서 뽑은 쌍을 직선으로 잇고 \(x_t=(1-t)x_0+tx_1\)을 표시한다. 오른쪽의 속도장은 신경망이 아니라 아래 '더 깊이'의 식으로 정확히 계산한 \(\mathcal L_{\mathrm{CFM}}\)의 최적해이며, 입자는 이 장을 따라 Euler 200스텝으로 적분했다.</figcaption>
+</figure>
+
+<div class="fix"><b class="tag">보충</b>
+<p>"똑바로 걸어간다"는 학습 때 만드는 한 쌍의 경로에 대한 이야기다. 모델이 배우는 것은 여러 직선의 평균이라서, 실제로 추론 때 따라가는 궤적은 휘어진다. 한 위치에서 속도가 하나로 정해져 있으니 궤적끼리 교차할 수도 없다. 교차하던 직선들이 서로를 피해 휘는 것이다.</p></div>
+
+<details class="deep"><summary>더 깊이 <span>평균을 배워도 되는 이유: 조건부 flow matching의 두 정리</span></summary><div class="body">
+<p>원래 배우고 싶은 것은 전체 분포를 옮기는 속도장 \(u_t(x)\)다. 이를 직접 회귀하는 목적함수는</p>
+$$\mathcal L_{\mathrm{FM}}(\theta)=\mathbb E_{t,\;x\sim p_t}\big\lVert v_\theta(x,t)-u_t(x)\big\rVert^2$$
+<p>인데, \(u_t\)를 모르니 계산할 수 없다. Lipman 등(2023)은 데이터 샘플 하나 \(x_1\)에 조건화된 경로 \(p_t(x\mid x_1)\)와 속도 \(u_t(x\mid x_1)\)를 먼저 정하고, 이를 섞어 전체를 정의했다.</p>
+$$p_t(x)=\int p_t(x\mid x_1)q(x_1)\,dx_1,\qquad u_t(x)=\int u_t(x\mid x_1)\,\frac{p_t(x\mid x_1)q(x_1)}{p_t(x)}\,dx_1.$$
+<p>분수 부분은 사후확률 \(p(x_1\mid x_t=x)\)이다. 즉 \(u_t(x)\)는 "\(x\)를 지나는 조건부 속도들의 가중평균"이고, 본문의 "평균 속도"가 바로 이것이다.</p>
+<div class="thm"><span class="h">정리 1</span>각 \(u_t(\cdot\mid x_1)\)이 \(p_t(\cdot\mid x_1)\)을 생성하면, \(u_t\)는 \(p_t\)를 생성한다.</div>
+<p><b>증명.</b> \(\partial_tp_t(x)=\int\partial_tp_t(x\mid x_1)q\,dx_1=-\int\nabla\cdot(p_t(x\mid x_1)u_t(x\mid x_1))q\,dx_1=-\nabla\cdot(p_t(x)u_t(x))\). 마지막 등호는 \(u_t\)의 정의에서 나온다. \(\square\)</p>
+<p>이제 계산 가능한 조건부 목적함수를 쓴다.</p>
+$$\mathcal L_{\mathrm{CFM}}(\theta)=\mathbb E_{t,\;x_1\sim q,\;x\sim p_t(\cdot\mid x_1)}\big\lVert v_\theta(x,t)-u_t(x\mid x_1)\big\rVert^2.$$
+<div class="thm"><span class="h">정리 2</span>\(\nabla_\theta\mathcal L_{\mathrm{FM}}=\nabla_\theta\mathcal L_{\mathrm{CFM}}\). 두 손실은 \(\theta\)와 무관한 상수만큼만 다르다.</div>
+<p><b>증명.</b> 제곱을 전개하면 \(\lVert v_\theta\rVert^2\) 항은 \(\mathbb E_{q(x_1)p_t(x\mid x_1)}=\mathbb E_{p_t(x)}\)이라 같고, 교차항은 \(\mathbb E_{p_t(x)}\langle v_\theta,u_t(x)\rangle=\int\langle v_\theta,\int u_t(x\mid x_1)p_t(x\mid x_1)q\,dx_1\rangle dx=\mathbb E_{q,p_t(x\mid x_1)}\langle v_\theta,u_t(x\mid x_1)\rangle\)로 같다. 나머지 항은 \(\theta\)와 무관하다. \(\square\)</p>
+<p>필기의 직선 보간 \(x_t=tx_1+(1-t)x_0\)에서는 \(p_t(x\mid x_1)=\mathcal N(tx_1,(1-t)^2I)\)이고, 위치의 함수로 쓴 조건부 속도는 \(u_t(x\mid x_1)=(x_1-x)/(1-t)\)다. 경로 위 점을 넣으면 \(x_1-x_0\)으로 필기와 같다. 이 경로는 Lipman 등의 OT 경로에서 \(\sigma_{\min}\to0\)인 경우이며, rectified flow(Liu 등, 2023)의 선형 보간과 같다.</p>
+<p><b>그림 2의 속도장.</b> 데이터가 유한 집합 \(\{x^{(i)}\}\)이면 평균 속도를 정확히 계산할 수 있다.</p>
+$$w_i\propto\exp\!\Big(-\frac{\lVert x-t\,x^{(i)}\rVert^2}{2(1-t)^2}\Big),\qquad u_t(x)=\frac{\sum_iw_i\,x^{(i)}-x}{1-t}.$$
+<p>그림은 신경망 없이 이 식으로 그렸다. 이 최적해를 끝까지 따라가면 반드시 학습 데이터 중 하나에 도착한다. 즉 손실을 완벽히 줄인 모델은 학습 데이터를 재현할 뿐이고, 실제 신경망이 새로운 샘플을 만드는 것은 이 해를 정확히 따르지 못하는 덕분이다. 또 \(t\to1\)에서 분모가 0으로 가 속도장이 특이해진다.</p>
+<p><b>교차하지 않는 이유.</b> 속도장이 립시츠이면 ODE 해가 유일하므로, 같은 시각 같은 점에 있던 두 입자는 이후 영원히 같은 궤적을 따라야 한다. 따라서 다른 출발점의 궤적은 만날 수 없다.</p>
+</div></details>
+
+<h3>학습할 때 τ는 어떻게 뽑을까</h3>
+
+<p>π0는 \(\tau\)를 0과 1 사이에서 고르게 뽑지 않고, 노이즈에 가까운 쪽을 더 자주 뽑는다. 로봇 행동은 관측이 정답을 강하게 좁혀 주기 때문에, 마지막 미세 조정보다 노이즈가 많을 때 큰 방향을 정하는 일이 더 어렵다는 판단이다.</p>
+
+<figure id="fig-beta">
+  <svg id="beta-svg" viewBox="0 0 640 250" width="100%" role="img" aria-labelledby="beta-t beta-d"><title id="beta-t">π0의 τ 샘플링 분포</title><desc id="beta-d">τ가 0에 가까울수록 밀도가 1.5에 가깝게 높고, τ가 0.999에 가까워질수록 0으로 떨어지는 곡선과 균등분포 비교</desc></svg>
+  <figcaption><b>그림 3.</b> 학습 시 \(\tau\)의 분포. 실선이 π0의 이동된 베타 분포, 점선이 균등분포다. 이 글의 규약에서 \(\tau=0\)이 노이즈이므로, 노이즈가 많은 구간을 더 자주 학습한다.</figcaption>
+</figure>
+
+<details class="deep"><summary>더 깊이 <span>분포의 정확한 식</span></summary><div class="body">
+<p>\(s=0.999\)로 두고 \(p(\tau)=\mathrm{Beta}\big(\tfrac{s-\tau}{s};1.5,1\big)\)이다. 정규화하면 \(p(\tau)=\tfrac{3}{2s}\sqrt{1-\tau/s}\ (0\le\tau\le s)\). \(\tau>s\)를 버리는 것은 적분 스텝이 \(1-s\)보다 크면 그 구간을 추론 때 평가할 일이 없기 때문이다.</p>
+</div></details>
+
+<h2 id="s5"><span class="n">5</span>무엇이 좋은가</h2>
+
+<h3>① 예측 대상의 단순화</h3>
+
+<div class="memo"><b class="tag">내 필기</b>
+<p>노이즈 → 정답으로 가는 길이 직선에 가깝기 때문에 모델이 배워야 할 속도장(Vector Field)이 훨씬 단순하고 매끄러워 짐.</p></div>
+
+<p>학습 목표 \(\mathbf A-\epsilon\)은 한 쌍 안에서 시간에 따라 바뀌지 않는 상수다. 모델에게 주는 문제가 단순하다는 뜻이고, 이 점은 분명한 장점이다.</p>
+
+<p>또 하나의 장점은 숫자가 안정적이라는 것이다. 사실 속도, 정답 행동, 노이즈 중 무엇을 예측하든 서로 바꿔 쓸 수 있다. 하지만 정답이나 노이즈를 예측한 뒤 속도로 바꾸려면 작은 수로 나눠야 하는 구간이 생겨 오차가 커진다. 속도를 직접 예측하면 그런 나눗셈 없이 적분에 필요한 값을 바로 얻는다.</p>
+
+<div class="fix"><b class="tag">보충</b>
+<p>"길이 직선에 가깝다"는 4절의 함정과 연결된다. 학습 목표는 직선이지만 모델이 배우는 평균 속도장은 휘어 있다. 그래도 디퓨전이 만드는 경로보다는 대체로 덜 휘어진다는 것이 실험적으로 알려져 있고, 이것이 실제로 누리는 장점이다.</p></div>
+
+<details class="deep"><summary>더 깊이 <span>세 가지 예측 대상의 관계와 스코어</span></summary><div class="body">
+<p>고정된 \((x_t,t)\)에서 속도 \(v\), 데이터 추정 \(\hat x_1\), 노이즈 추정 \(\hat x_0\)는 아핀 관계다.</p>
+$$\hat x_1=x_t+(1-t)\,v,\qquad \hat x_0=x_t-t\,v.$$
+<p>"남은 시간만큼 더 가면 도착점", "지나온 시간만큼 되돌아가면 출발점"이라는 뜻이다. 손실로 쓰면 시간별 가중치만 다르다.</p>
+$$\big\lVert v-(x_1-x_0)\big\rVert^2=\frac{\lVert\hat x_1-x_1\rVert^2}{(1-t)^2}=\frac{\lVert\hat x_0-x_0\rVert^2}{t^2}.$$
+<p>\(\hat x_1\)을 예측해 \(v=(\hat x_1-x_t)/(1-t)\)로 바꾸면 \(t\to1\)에서, \(\hat x_0\)를 예측해 \(v=(x_t-\hat x_0)/t\)로 바꾸면 \(t\to0\)에서 오차가 증폭된다. 본문의 "작은 수로 나눈다"가 이것이다.</p>
+<p><b>스코어와의 관계.</b> \(\nabla_x\log p_t(x\mid x_1)=-(x-tx_1)/(1-t)^2=-x_0/(1-t)\)이므로 스코어는 \(s(x,t)=-\mathbb E[X_0\mid X_t=x]/(1-t)\)이고,</p>
+$$u_t(x)=\frac{x-\mathbb E[X_0\mid X_t=x]}{t}=\frac{x+(1-t)\,s(x,t)}{t}\quad(t>0).$$
+<p>속도장은 스코어의 아핀 함수이며 계수가 조건 정보와 무관하다. 이 사실이 ③ 가이던스와 6절 디퓨전 비교에서 쓰인다.</p>
+</div></details>
+
+<h3>② 빠른 추론 속도</h3>
+
+<div class="memo"><b class="tag">내 필기</b>
+<p>속도 일정·매끄러움이 대폭 적은 적분 스텝으로 노이즈에서 정확한 행동 궤적으로 순식간 도달.</p></div>
+
+<p>맞는 방향이지만 조건이 붙는다. 적은 스텝으로 충분한지는 평균 궤적이 얼마나 곧은지에 달려 있다. 궤적이 완전히 곧으면 한 번에 가도 정확하지만, 휘어 있으면 스텝이 적을수록 커브를 못 따라가고 빗나간다.</p>
+
+<p>극단적인 경우가 재미있다. 딱 한 스텝만 가면 어떻게 될까? 출발 시점에는 노이즈가 어느 정답으로 갈지 아무 정보가 없으므로, 모델이 알려주는 속도는 "모든 정답의 평균 방향"이다. 그래서 모든 샘플이 데이터의 평균 한 점으로 모인다. 아래에서 스텝 수를 1부터 늘려 보자.</p>
+
+<figure id="fig-euler">
+  <div class="ctl">
+    <label for="e-n">적분 스텝 수 N</label>
+    <input type="range" id="e-n" min="1" max="40" step="1" value="1">
+    <output id="e-nout" for="e-n">1</output>
+  </div>
+  <div class="pair">
+    <div><p class="plab">Euler 궤적 <span>최적 속도장 사용</span></p><canvas id="e-traj" width="620" height="620" aria-label="선택한 스텝 수로 적분한 궤적"></canvas></div>
+    <div><p class="plab">최종 샘플 <span>t = 1</span></p><canvas id="e-final" width="620" height="620" aria-label="최종 샘플 분포"></canvas></div>
+  </div>
+  <p class="stat">최종 샘플에서 가장 가까운 군집 중심까지의 평균 거리 <b id="e-dist">0</b> (군집 표준편차 0.18)</p>
+  <figcaption><b>그림 4.</b> 속도장이 완벽하더라도 이산화 오차는 남는다. N=1이면 모든 샘플이 원점 근처의 데이터 평균으로 붕괴하고, N이 커질수록 여덟 개 모드가 분리된다. 원의 반지름 방향으로 휘는 궤적일수록 적은 스텝에서 크게 빗나간다.</figcaption>
+</figure>
+
+<p>로봇으로 옮기면 무섭다. "장애물 왼쪽으로 돌기"와 "오른쪽으로 돌기" 시연의 평균은 장애물에 정면으로 부딪히는 궤적이다. π0의 10스텝은 대부분의 상황에서 충분하지만, 같은 관측에 여러 전략이 가능할 때 스텝을 과하게 줄이면 이런 평균 행동이 나올 위험이 있다.</p>
+
+<div class="fix"><b class="tag">보충</b>
+<p>"순식간에 도달"은 궤적이 곧을 때만 성립한다. 스텝을 줄이려는 연구들이 대부분 궤적을 곧게 만드는 방향으로 가는 이유다.</p></div>
+
+<details class="deep"><summary>더 깊이 <span>오차의 크기와 궤적을 곧게 만드는 방법</span></summary><div class="body">
+<p>Euler 방법의 전역 오차는 \(O(\Delta t)\)이고, 상수는 궤적의 가속도 \(\ddot x_t=\partial_tv+(\nabla_xv)v\)에 비례한다. 궤적이 직선이면 \(\ddot x_t=0\)이라 1스텝으로 정확하다.</p>
+<p>1스텝 붕괴는 다음과 같이 보인다. \(t=0\)에서 \(X_0\)는 \(X_1\)과 독립이므로 \(u_0(x)=\mathbb E[X_1]-x\), 따라서 \(x_0+u_0(x_0)=\mathbb E[X_1]\)이다.</p>
+<p>궤적을 곧게 만드는 방법으로는 학습된 ODE로 (노이즈, 결과) 쌍을 새로 만들어 다시 학습하는 reflow(Liu 등, 2023), 배치 안에서 노이즈와 데이터를 최소 비용으로 짝짓는 미니배치 OT 결합(Tong 등, 2024), 여러 스텝의 결과를 한 번에 내도록 학생 모델을 증류하는 방법 등이 있다.</p>
+</div></details>
+
+<h3>③ 가이던스</h3>
+
+<p>필기에서 비워둔 부분이다. 가이던스는 학습이 끝난 뒤, 샘플링하는 동안 속도를 살짝 고쳐서 원하는 성질을 강하게 만드는 기법이다. 두 가지가 있다.</p>
+
+<p><b>조건을 더 강하게 따르기.</b> 학습 때 가끔 언어 지시를 지우고 학습하면, 모델은 "지시가 있을 때의 속도"와 "없을 때의 속도"를 모두 알게 된다. 샘플링 때 둘의 차이를 키우면 지시를 더 충실히 따르는 행동이 나온다. 대신 다양성은 줄어든다.</p>
+
+$$\tilde v=v(\cdot,\varnothing)+w\,\big(v(\cdot,c)-v(\cdot,\varnothing)\big),\qquad w>1$$
+
+<p><b>제약을 반영하기.</b> 적분 중간에 "지금 속도로 끝까지 가면 어디쯤 도착할지"를 계산할 수 있다(\(\hat{\mathbf A}=\mathbf A^\tau+(1-\tau)v\)). 이 예상 도착점이 충돌하거나 이미 실행 중인 행동과 어긋나면, 그걸 줄이는 방향으로 속도를 고친다. Black 등(2025)의 real-time chunking은 이 방법으로 추론이 도는 동안 이미 실행 중인 청크 앞부분과 새 청크가 매끄럽게 이어지도록 한다.</p>
+
+<div class="fix"><b class="tag">보충</b>
+<p>제약 가이던스는 제약을 지킨다고 보장하지 않는다. 예상 도착점은 실제 샘플이 아니라 여러 가능성의 평균이라, 적분 초반에는 흐릿한 평균값이어서 실제 도착점과 다를 수 있다. 안전이 걸린 제약이라면 샘플링 뒤에 따로 검증하거나 보정해야 한다.</p></div>
+
+<details class="deep"><summary>더 깊이 <span>디퓨전 가이던스와 정확히 같은 이유</span></summary><div class="body">
+<p>①의 더 깊이에서 본 \(u_t=(x+(1-t)s)/t\)는 스코어의 아핀 함수이고 계수가 조건과 무관하다. 가중치 합이 1인 속도의 결합 \(\tilde v=(1-w)v_\varnothing+wv_c\)는 \(\tilde v=(x+(1-t)\tilde s)/t\), \(\tilde s=(1-w)s_\varnothing+ws_c\)가 된다. 즉 디퓨전의 classifier-free guidance(Ho와 Salimans, 2022)와 같은 연산이다.</p>
+<p>제약 가이던스는 비용 \(J\)에 대해 \(\tilde v(x_t,t)=v(x_t,t)-\lambda_t\nabla_{x_t}J\big(\hat x_1(x_t)\big)\), \(\hat x_1=x_t+(1-t)v\)로 쓴다. \(\hat x_1=\mathbb E[X_1\mid X_t=x_t]\)이므로 작은 \(t\)에서는 모드들이 섞인 평균이고, 이것이 보충 상자에서 말한 한계의 정확한 이유다.</p>
+</div></details>
+
+<h2 id="s6"><span class="n">6</span>디퓨전과 비교하면</h2>
+
+<p>로봇에 생성 모델을 본격적으로 쓴 첫 사례는 Diffusion Policy(Chi 등, 2023)다. 디퓨전은 매 스텝 "섞여 있는 노이즈"를 예측해 조금 빼고, 다시 작은 노이즈를 더하는 과정을 수십 번 반복한다. flow matching은 노이즈를 다시 넣지 않고 속도를 따라 결정적으로 이동한다. 같은 노이즈에서 출발해 action chunk를 만드는 두 과정을 비교해 보자.</p>
+
+<figure id="fig-chunk">
+  <div class="ctl">
+    <button type="button" id="k-play">재생</button>
+    <label for="k-p">진행도</label>
+    <input type="range" id="k-p" min="0" max="1" step="0.005" value="0">
+    <output id="k-pout" for="k-p">0%</output>
+    <button type="button" id="k-new">새 노이즈</button>
+  </div>
+  <div class="pair">
+    <div><p class="plab">디퓨전 (DDPM) <span>네트워크 호출 <b id="k-n1">0</b> / 50</span></p><canvas id="k-dif" width="620" height="620" aria-label="DDPM으로 action chunk를 복원하는 과정"></canvas></div>
+    <div><p class="plab">Flow matching <span>네트워크 호출 <b id="k-n2">0</b> / 10</span></p><canvas id="k-fm" width="620" height="620" aria-label="Flow matching으로 action chunk를 복원하는 과정"></canvas></div>
+  </div>
+  <div class="legend"><span><i style="background:var(--green)"></i>시연 궤적</span><span><i style="background:var(--orange)"></i>현재 action chunk (50 waypoint)</span><span><i style="background:var(--violet)"></i>waypoint 하나가 지나온 경로</span></div>
+  <figcaption><b>그림 5.</b> 2차원 작업공간의 엔드이펙터 궤적 50개 waypoint를 하나의 action chunk로 본다. 왼쪽은 코사인 스케줄 DDPM 50스텝, 오른쪽은 직선 경로 flow matching의 Euler 10스텝이며, 둘 다 정답을 아는 이상적 예측기를 썼다. DDPM은 매 스텝 노이즈를 다시 주입하므로 보라색 경로가 들쭉날쭉하고, flow matching은 결정적 직선을 따른다. 관측 하나에 정답이 하나뿐인 상황이라 flow matching 경로가 완전한 직선으로 나오지만, 시연이 다봉분포면 그림 2처럼 휘어진다.</figcaption>
+</figure>
+
+<p>보라색 선(waypoint 하나가 지나온 길)을 보면 차이가 선명하다. 디퓨전은 50번에 걸쳐 들쭉날쭉 수렴하고, flow matching은 10번에 곧게 도착한다. 다만 이 그림은 관측 하나에 정답이 하나뿐인 쉬운 상황이라 flow matching 경로가 완전한 직선이다. 정답이 여러 개면 그림 2처럼 휘어진다.</p>
+
+<details class="deep"><summary>더 깊이 <span>둘은 같은 틀의 다른 선택이다</span></summary><div class="body">
+<p>직선 보간은 더 일반적인 가우시안 경로의 특수한 경우다.</p>
+$$x_t=\alpha_t x_1+\sigma_t x_0,\qquad u_t(x_t\mid x_0,x_1)=\dot\alpha_t x_1+\dot\sigma_t x_0.$$
+<p>\(\alpha_t=t,\sigma_t=1-t\)이면 직선 보간이고, 분산 보존(VP) 디퓨전의 스케줄을 넣으면 디퓨전과 같은 확률 경로가 된다(Lipman 등, 2023). DDPM(Ho 등, 2020)의 노이즈 예측은 \(\hat x_0\) 예측, 곧 스코어 예측이다. Song 등(2021)은 디퓨전과 같은 분포 경로를 갖는 결정적 ODE(확률 흐름 ODE)가 있음을 보였고, DDIM은 그 ODE를 적분하는 방법이다. flow matching은 이 ODE의 속도장을 스코어를 거치지 않고 곧바로 회귀로 배운다. 결국 차이는 경로(\(\alpha_t,\sigma_t\))와 예측 대상의 선택이다.</p>
+</div></details>
+
+<h2 id="s7"><span class="n">7</span>정리</h2>
+
+<p class="oneline">노이즈와 정답을 직선으로 이은 뒤 그 위의 속도를 회귀로 배우고, 추론 때는 그 속도를 몇 번 더해서 행동을 만든다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>단계</th><th>하는 일</th><th>꼭 기억할 점</th></tr></thead>
+<tbody>
+<tr><td>Step 1</td><td>\(\mathbf A^0=\epsilon\sim\mathcal N(0,I)\), 크기 \(H\times d_a\)</td><td>한 행동이 아니라 50스텝짜리 action chunk</td></tr>
+<tr><td>Step 2</td><td>VLM으로 이미지·언어·상태를 한 번 처리, KV 캐시</td><td>일방통행 마스크 덕분에 캐싱이 정확함</td></tr>
+<tr><td>Step 3</td><td>\(\mathbf A\leftarrow\mathbf A+0.1\,v_\theta\)를 10번</td><td>무거운 VLM은 한 번, action expert만 반복</td></tr>
+<tr><td>학습</td><td>\(\lVert v_\theta-(\mathbf A-\epsilon)\rVert^2\)</td><td>모델은 정답들의 평균 속도를 배움, 궤적은 휨</td></tr>
+<tr><td>장점 ①</td><td>단순하고 안정적인 학습 목표</td><td>목표는 직선, 배우는 속도장은 곡선</td></tr>
+<tr><td>장점 ②</td><td>적은 스텝</td><td>궤적이 곧을 때만. 1스텝이면 평균으로 붕괴</td></tr>
+<tr><td>장점 ③</td><td>가이던스로 조건·제약 반영</td><td>제약 만족을 보장하지는 않음</td></tr>
+</tbody></table></div>
+
+<h2 id="refs">참고문헌</h2>
+<ol class="refs">
+<li>Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, M. Le. Flow Matching for Generative Modeling. ICLR 2023. <a href="https://arxiv.org/abs/2210.02747">arXiv:2210.02747</a></li>
+<li>X. Liu, C. Gong, Q. Liu. Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow. ICLR 2023. <a href="https://arxiv.org/abs/2209.03003">arXiv:2209.03003</a></li>
+<li>M. S. Albergo, E. Vanden-Eijnden. Building Normalizing Flows with Stochastic Interpolants. ICLR 2023. <a href="https://arxiv.org/abs/2209.15571">arXiv:2209.15571</a></li>
+<li>A. Tong 외. Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal Transport. TMLR 2024. <a href="https://arxiv.org/abs/2302.00482">arXiv:2302.00482</a></li>
+<li>J. Ho, A. Jain, P. Abbeel. Denoising Diffusion Probabilistic Models. NeurIPS 2020. <a href="https://arxiv.org/abs/2006.11239">arXiv:2006.11239</a></li>
+<li>Y. Song 외. Score-Based Generative Modeling through Stochastic Differential Equations. ICLR 2021. <a href="https://arxiv.org/abs/2011.13456">arXiv:2011.13456</a></li>
+<li>J. Song, C. Meng, S. Ermon. Denoising Diffusion Implicit Models. ICLR 2021. <a href="https://arxiv.org/abs/2010.02502">arXiv:2010.02502</a></li>
+<li>J. Ho, T. Salimans. Classifier-Free Diffusion Guidance. 2022. <a href="https://arxiv.org/abs/2207.12598">arXiv:2207.12598</a></li>
+<li>C. Chi 외. Diffusion Policy: Visuomotor Policy Learning via Action Diffusion. RSS 2023. <a href="https://arxiv.org/abs/2303.04137">arXiv:2303.04137</a></li>
+<li>K. Black 외. π0: A Vision-Language-Action Flow Model for General Robot Control. 2024. <a href="https://arxiv.org/abs/2410.24164">arXiv:2410.24164</a></li>
+<li>K. Black, M. Y. Galliker, S. Levine. Real-Time Execution of Action Chunking Flow Policies. 2025.</li>
+</ol>
+
+<footer>본문의 모든 그림은 브라우저에서 계산된다. 2차원 예제의 속도장은 신경망 없이 데이터셋에서 정확히 계산한 최적해이고, 그림 5의 두 모델은 정답을 아는 이상적 예측기를 사용했다.</footer>
+
+</main>
+
+
+<script>
+(function(){
+"use strict";
+const root=document.documentElement;
+const C=n=>getComputedStyle(root).getPropertyValue(n).trim();
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function gn(){let u=Math.random()||1e-9,v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function rgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
+function rgba(h,a){const c=rgb(h);return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
+function mix(h1,h2,t){const a=rgb(h1),b=rgb(h2);return 'rgb('+a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(',')+')';}
+function ring(n,r,sd){const d=[];for(let i=0;i<n;i++){const k=i%8,a=k*Math.PI/4;d.push([r*Math.cos(a)+sd*gn(),r*Math.sin(a)+sd*gn()]);}return d;}
+function vel(x,y,t,data){
+  const s=Math.max(1-t,0.015),s2=2*s*s,n=data.length;let m=-Infinity;const w=new Float64Array(n);
+  for(let i=0;i<n;i++){const dx=x-t*data[i][0],dy=y-t*data[i][1];w[i]=-(dx*dx+dy*dy)/s2;if(w[i]>m)m=w[i];}
+  let Z=0,ex=0,ey=0;for(let i=0;i<n;i++){const e=Math.exp(w[i]-m);Z+=e;ex+=e*data[i][0];ey+=e*data[i][1];}
+  return[(ex/Z-x)/s,(ey/Z-y)/s];
+}
+function integrate(starts,data,K){
+  const tr=[starts.map(p=>p.slice())];let cur=starts.map(p=>p.slice());
+  for(let k=0;k<K;k++){const t=k/K,dt=1/K;cur=cur.map(p=>{const v=vel(p[0],p[1],t,data);return[p[0]+v[0]*dt,p[1]+v[1]*dt];});tr.push(cur.map(p=>p.slice()));}
+  return tr;
+}
+function mapper(W,H,xr,yr){return{X:x=>(x-xr[0])/(xr[1]-xr[0])*W,Y:y=>H-(y-yr[0])/(yr[1]-yr[0])*H};}
+function dot(c,x,y,r,col){c.fillStyle=col;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();}
+function btnLabel(b,on){b.textContent=on?'정지':'재생';}
+const redrawers=[];
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>redrawers.forEach(f=>f()));
+
+/* hero */
+(function(){
+  const cv=document.getElementById('hero');if(!cv)return;const c=cv.getContext('2d');
+  const W=cv.width,H=cv.height,m=mapper(W,H,[-5,5],[-4,4]);
+  const K=80,NP=420,FLOW=3200,HOLD=1500,FADE=700;
+  let data,tr,start=null,raf=null,visible=true;
+  function build(){data=ring(160,2.7,0.16);tr=integrate(Array.from({length:NP},()=>[gn(),gn()]),data,K);}
+  function frame(tt,alpha){
+    const vio=C('--violet'),grn=C('--green');c.clearRect(0,0,W,H);c.globalAlpha=alpha;
+    const kf=tt*K,k=Math.min(Math.floor(kf),K),f=kf-k,from=Math.max(0,k-10);
+    c.lineWidth=1.3;
+    for(let i=0;i<NP;i++){c.strokeStyle=rgba(C('--blue'),0.16);c.beginPath();c.moveTo(m.X(tr[from][i][0]),m.Y(tr[from][i][1]));for(let j=from+1;j<=k;j++)c.lineTo(m.X(tr[j][i][0]),m.Y(tr[j][i][1]));c.stroke();}
+    const col=mix(vio,grn,tt);
+    for(let i=0;i<NP;i++){const a=tr[k][i],b=tr[Math.min(k+1,K)][i];dot(c,m.X(a[0]+(b[0]-a[0])*f),m.Y(a[1]+(b[1]-a[1])*f),3.2,col);}
+    c.globalAlpha=1;
+  }
+  function staticFrame(){c.clearRect(0,0,W,H);c.lineWidth=1;c.strokeStyle=rgba(C('--blue'),0.13);
+    for(let i=0;i<NP;i++){c.beginPath();tr.forEach((p,j)=>j?c.lineTo(m.X(p[i][0]),m.Y(p[i][1])):c.moveTo(m.X(p[i][0]),m.Y(p[i][1])));c.stroke();}
+    tr[0].forEach(p=>dot(c,m.X(p[0]),m.Y(p[1]),2.4,rgba(C('--violet'),0.6)));tr[K].forEach(p=>dot(c,m.X(p[0]),m.Y(p[1]),3,C('--green')));}
+  function loop(ts){
+    if(start===null)start=ts;const e=ts-start;
+    if(e<FLOW){const u=e/FLOW;frame(u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2,1);}
+    else if(e<FLOW+HOLD)frame(1,1);
+    else if(e<FLOW+HOLD+FADE)frame(1,1-(e-FLOW-HOLD)/FADE);
+    else{build();start=ts;}
+    raf=visible?requestAnimationFrame(loop):null;
+  }
+  build();
+  if(reduce){staticFrame();redrawers.push(staticFrame);return;}
+  new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible&&!raf){start=null;raf=requestAnimationFrame(loop);}}).observe(cv);
+})();
+
+/* fig 1: conditional vs marginal */
+(function(){
+  const L=document.getElementById('c-left'),Rt=document.getElementById('c-right');if(!L)return;
+  const cl=L.getContext('2d'),cr=Rt.getContext('2d'),W=L.width,m=mapper(W,W,[-4.2,4.2],[-4.2,4.2]);
+  const sl=document.getElementById('c-t'),out=document.getElementById('c-tout'),pb=document.getElementById('c-play');
+  const NP=240,K=200;let data,pairs,tr;
+  function build(){data=ring(240,2.6,0.18);pairs=Array.from({length:NP},()=>[[gn(),gn()],data[Math.floor(Math.random()*data.length)]]);tr=integrate(pairs.map(p=>p[0]),data,K);}
+  function draw(){
+    const t=+sl.value;out.textContent=t.toFixed(2);
+    const vio=C('--violet'),grn=C('--green'),org=C('--orange'),ink2=C('--ink-2');
+    cl.clearRect(0,0,W,W);cl.lineWidth=1;cl.strokeStyle=rgba(ink2,0.16);
+    pairs.forEach(p=>{cl.beginPath();cl.moveTo(m.X(p[0][0]),m.Y(p[0][1]));cl.lineTo(m.X(p[1][0]),m.Y(p[1][1]));cl.stroke();});
+    pairs.forEach(p=>dot(cl,m.X(p[0][0]),m.Y(p[0][1]),2.4,rgba(vio,0.5)));
+    data.forEach(d=>dot(cl,m.X(d[0]),m.Y(d[1]),2.4,rgba(grn,0.45)));
+    pairs.forEach(p=>dot(cl,m.X((1-t)*p[0][0]+t*p[1][0]),m.Y((1-t)*p[0][1]+t*p[1][1]),3.4,org));
+    cr.clearRect(0,0,W,W);const tt=Math.min(t,0.97);cr.strokeStyle=rgba(ink2,0.65);cr.lineWidth=1.3;
+    for(let gx=-3.9;gx<=3.95;gx+=0.6)for(let gy=-3.9;gy<=3.95;gy+=0.6){
+      const v=vel(gx,gy,tt,data),n=Math.hypot(v[0],v[1])||1,len=Math.min(n,3)*0.1/n;
+      const x0=m.X(gx),y0=m.Y(gy),x1=m.X(gx+v[0]*len),y1=m.Y(gy+v[1]*len),a=Math.atan2(y1-y0,x1-x0);
+      cr.beginPath();cr.moveTo(x0,y0);cr.lineTo(x1,y1);cr.moveTo(x1,y1);cr.lineTo(x1-5*Math.cos(a-0.5),y1-5*Math.sin(a-0.5));cr.moveTo(x1,y1);cr.lineTo(x1-5*Math.cos(a+0.5),y1-5*Math.sin(a+0.5));cr.stroke();}
+    data.forEach(d=>dot(cr,m.X(d[0]),m.Y(d[1]),2.4,rgba(grn,0.35)));
+    const k=Math.round(t*K);cr.strokeStyle=rgba(org,0.3);cr.lineWidth=1;
+    for(let i=0;i<NP;i++){cr.beginPath();cr.moveTo(m.X(tr[0][i][0]),m.Y(tr[0][i][1]));for(let j=2;j<=k;j+=2)cr.lineTo(m.X(tr[j][i][0]),m.Y(tr[j][i][1]));cr.lineTo(m.X(tr[k][i][0]),m.Y(tr[k][i][1]));cr.stroke();}
+    tr[k].forEach(p=>dot(cr,m.X(p[0]),m.Y(p[1]),3.4,org));
+  }
+  let on=false,raf;
+  function tick(){let v=+sl.value+0.005;if(v>=1){v=1;on=false;btnLabel(pb,false);}sl.value=v;draw();if(on)raf=requestAnimationFrame(tick);}
+  pb.addEventListener('click',()=>{on=!on;btnLabel(pb,on);if(on){if(+sl.value>=1)sl.value=0;tick();}else cancelAnimationFrame(raf);});
+  sl.addEventListener('input',draw);
+  document.getElementById('c-new').addEventListener('click',()=>{build();draw();});
+  build();draw();redrawers.push(draw);
+})();
+
+/* fig 2: Euler step count */
+(function(){
+  const A=document.getElementById('e-traj'),B=document.getElementById('e-final');if(!A)return;
+  const ca=A.getContext('2d'),cb=B.getContext('2d'),W=A.width,m=mapper(W,W,[-4.2,4.2],[-4.2,4.2]);
+  const sl=document.getElementById('e-n'),out=document.getElementById('e-nout'),dist=document.getElementById('e-dist');
+  const data=ring(200,2.6,0.18),starts=Array.from({length:300},()=>[gn(),gn()]);
+  const centers=Array.from({length:8},(_,k)=>[2.6*Math.cos(k*Math.PI/4),2.6*Math.sin(k*Math.PI/4)]);
+  function draw(){
+    const N=+sl.value;out.textContent=N;const tr=integrate(starts,data,N);
+    const vio=C('--violet'),grn=C('--green'),org=C('--orange');
+    [ca,cb].forEach(c=>{c.clearRect(0,0,W,W);data.forEach(d=>dot(c,m.X(d[0]),m.Y(d[1]),2.4,rgba(grn,0.35)));});
+    ca.lineWidth=1;ca.strokeStyle=rgba(org,0.32);
+    for(let i=0;i<starts.length;i++){ca.beginPath();tr.forEach((p,j)=>j?ca.lineTo(m.X(p[i][0]),m.Y(p[i][1])):ca.moveTo(m.X(p[i][0]),m.Y(p[i][1])));ca.stroke();}
+    starts.forEach(p=>dot(ca,m.X(p[0]),m.Y(p[1]),2.2,rgba(vio,0.55)));
+    tr.forEach((step,j)=>{if(j>0&&j<N)step.forEach(p=>dot(ca,m.X(p[0]),m.Y(p[1]),1.4,rgba(org,0.5)));});
+    tr[N].forEach(p=>dot(ca,m.X(p[0]),m.Y(p[1]),3,org));
+    tr[N].forEach(p=>dot(cb,m.X(p[0]),m.Y(p[1]),3.2,org));
+    let s=0;tr[N].forEach(p=>{s+=Math.min(...centers.map(q=>Math.hypot(p[0]-q[0],p[1]-q[1])));});
+    dist.textContent=(s/tr[N].length).toFixed(2);
+  }
+  sl.addEventListener('input',draw);draw();redrawers.push(draw);
+})();
+
+/* fig 3: diffusion vs flow matching on an action chunk */
+(function(){
+  const A=document.getElementById('k-dif'),B=document.getElementById('k-fm');if(!A)return;
+  const ca=A.getContext('2d'),cb=B.getContext('2d'),W=A.width,m=mapper(W,W,[-4,4],[-4,4]);
+  const sl=document.getElementById('k-p'),out=document.getElementById('k-pout'),pb=document.getElementById('k-play');
+  const H=50,T=50,KF=10,TRK=25;
+  const clean=Array.from({length:H},(_,i)=>{const s=i/(H-1);return[-2.6+5.2*s,-1.8+2.4*Math.sin(Math.PI*s)+1.4*s];});
+  const f0=Math.cos(0.008/1.008*Math.PI/2)**2;
+  const ab=Array.from({length:T+1},(_,t)=>Math.cos(((t/T)+0.008)/1.008*Math.PI/2)**2/f0);
+  let dif,fm;
+  function build(){
+    const z=clean.map(()=>[gn()*1.3,gn()*1.3]);
+    dif=[z.map(q=>q.slice())];let x=z.map(q=>q.slice());
+    for(let t=T;t>=1;t--){
+      const a=ab[t],ap=ab[t-1],be=Math.min(1-a/ap,0.999),al=1-be;
+      const c1=Math.sqrt(ap)*be/(1-a),c2=Math.sqrt(al)*(1-ap)/(1-a),sg=t>1?Math.sqrt(be*(1-ap)/(1-a)):0;
+      x=x.map((q,i)=>[c1*clean[i][0]+c2*q[0]+sg*gn(),c1*clean[i][1]+c2*q[1]+sg*gn()]);dif.push(x.map(q=>q.slice()));}
+    fm=[z.map(q=>q.slice())];let y=z.map(q=>q.slice());
+    for(let k=0;k<KF;k++){y=y.map((q,i)=>[q[0]+(clean[i][0]-z[i][0])/KF,q[1]+(clean[i][1]-z[i][1])/KF]);fm.push(y.map(q=>q.slice()));}
+  }
+  function poly(c,pts,col,w){c.strokeStyle=col;c.lineWidth=w;c.beginPath();pts.forEach((q,i)=>i?c.lineTo(m.X(q[0]),m.Y(q[1])):c.moveTo(m.X(q[0]),m.Y(q[1])));c.stroke();}
+  function scene(c,seq,k){
+    const grn=C('--green'),org=C('--orange'),vio=C('--violet');
+    c.clearRect(0,0,W,W);poly(c,clean,rgba(grn,0.5),6);
+    dot(c,m.X(clean[0][0]),m.Y(clean[0][1]),7,grn);c.fillStyle=grn;c.fillRect(m.X(clean[H-1][0])-8,m.Y(clean[H-1][1])-8,16,16);
+    const tr=[];for(let j=0;j<=k;j++)tr.push(seq[j][TRK]);
+    poly(c,tr,vio,1.6);tr.forEach(q=>dot(c,m.X(q[0]),m.Y(q[1]),2.5,vio));
+    poly(c,seq[k],org,1.6);seq[k].forEach(q=>dot(c,m.X(q[0]),m.Y(q[1]),3,org));
+  }
+  function draw(){
+    const v=+sl.value;out.textContent=Math.round(v*100)+'%';
+    const k1=Math.round(v*T),k2=Math.floor(v*KF+1e-9);
+    document.getElementById('k-n1').textContent=k1;document.getElementById('k-n2').textContent=k2;
+    scene(ca,dif,k1);scene(cb,fm,k2);
+  }
+  let on=false,raf;
+  function tick(){let v=+sl.value+0.004;if(v>=1){v=1;on=false;btnLabel(pb,false);}sl.value=v;draw();if(on)raf=requestAnimationFrame(tick);}
+  pb.addEventListener('click',()=>{on=!on;btnLabel(pb,on);if(on){if(+sl.value>=1)sl.value=0;tick();}else cancelAnimationFrame(raf);});
+  sl.addEventListener('input',draw);
+  document.getElementById('k-new').addEventListener('click',()=>{build();draw();});
+  build();draw();redrawers.push(draw);
+})();
+
+/* fig 4: tau density */
+(function(){
+  const svg=document.getElementById('beta-svg');if(!svg)return;const NS='http://www.w3.org/2000/svg';
+  const x0=70,x1=610,yb=200,yt=30,ymax=1.6,s=0.999;
+  const X=t=>x0+t*(x1-x0),Y=p=>yb-p/ymax*(yb-yt);
+  function el(n,a,txt){const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;svg.appendChild(e);return e;}
+  el('line',{x1:x0,y1:yb,x2:x1,y2:yb,stroke:'var(--ink-2)','stroke-width':1});
+  el('line',{x1:x0,y1:yb,x2:x0,y2:yt,stroke:'var(--ink-2)','stroke-width':1});
+  [0,0.5,1,1.5].forEach(p=>{el('line',{x1:x0-4,y1:Y(p),x2:x0,y2:Y(p),stroke:'var(--ink-2)'});el('text',{x:x0-8,y:Y(p)+4,'text-anchor':'end','font-size':12,fill:'var(--ink-2)'},p.toFixed(1));});
+  [0,0.25,0.5,0.75,1].forEach(t=>{el('line',{x1:X(t),y1:yb,x2:X(t),y2:yb+4,stroke:'var(--ink-2)'});el('text',{x:X(t),y:yb+18,'text-anchor':'middle','font-size':12,fill:'var(--ink-2)'},t);});
+  el('text',{x:X(0),y:yb+38,'text-anchor':'start','font-size':12.5,fill:'var(--ink-2)'},'τ = 0, 노이즈');
+  el('text',{x:X(1),y:yb+38,'text-anchor':'end','font-size':12.5,fill:'var(--ink-2)'},'τ = 1, 행동');
+  el('line',{x1:X(0),y1:Y(1),x2:X(1),y2:Y(1),stroke:'var(--ink-2)','stroke-dasharray':'5 5','stroke-width':1.2});
+  let d='';for(let i=0;i<=300;i++){const t=i/300*s,p=1.5/s*Math.sqrt(Math.max(0,1-t/s));d+=(i?'L':'M')+X(t).toFixed(1)+' '+Y(p).toFixed(1);}
+  d+='L'+X(1).toFixed(1)+' '+Y(0).toFixed(1);
+  el('path',{d:d,fill:'none',stroke:'var(--blue)','stroke-width':2.4});
+  el('text',{x:X(0.06),y:Y(1.5)-8,'font-size':13,fill:'var(--blue)'},'π0: (3/2s)·√(1 − τ/s)');
+  el('text',{x:X(0.72),y:Y(1)-8,'font-size':13,fill:'var(--ink-2)'},'균등분포');
+})();
+
+/* fig 5: blockwise causal mask */
+(function(){
+  const svg=document.getElementById('mask-svg');if(!svg)return;const NS='http://www.w3.org/2000/svg';
+  const toks=['I₁','I₂','I₃','ℓ₁','ℓ₂','q','a₁','a₂','a₃','a₄'],blk=[0,0,0,0,0,1,2,2,2,2];
+  const cs=24,gx=210,gy=62,n=toks.length;
+  function el(nm,a,txt){const e=document.createElementNS(NS,nm);for(const k in a)e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;svg.appendChild(e);return e;}
+  el('text',{x:gx+n*cs/2,y:20,'text-anchor':'middle','font-size':13,fill:'var(--ink-2)'},'key (attend 대상)');
+  el('text',{x:gx-60,y:gy-14,'text-anchor':'middle','font-size':13,fill:'var(--ink-2)'},'query');
+  toks.forEach((t,i)=>{
+    el('text',{x:gx+i*cs+cs/2,y:gy-10,'text-anchor':'middle','font-size':12.5,fill:'var(--ink)'},t);
+    el('text',{x:gx-10,y:gy+i*cs+cs/2+4,'text-anchor':'end','font-size':12.5,fill:'var(--ink)'},t);
+    for(let j=0;j<n;j++){const ok=blk[j]<=blk[i];
+      el('rect',{x:gx+j*cs+1.5,y:gy+i*cs+1.5,width:cs-3,height:cs-3,rx:3,fill:ok?'var(--blue)':'none','fill-opacity':ok?0.82:0,stroke:ok?'none':'var(--rule)','stroke-width':1});}
+  });
+  [5,6].forEach(b=>{el('line',{x1:gx+b*cs,y1:gy-2,x2:gx+b*cs,y2:gy+n*cs+2,stroke:'var(--ink-2)','stroke-width':1.2});el('line',{x1:gx-2,y1:gy+b*cs,x2:gx+n*cs+2,y2:gy+b*cs,stroke:'var(--ink-2)','stroke-width':1.2});});
+  const groups=[['이미지·언어',0,5],['상태',5,6],['행동',6,10]];
+  groups.forEach(g=>el('text',{x:gx-40,y:gy+(g[1]+g[2])/2*cs+4,'text-anchor':'end','font-size':12.5,fill:'var(--ink-2)'},g[0]));
+  const lx=gx+n*cs+36;
+  el('rect',{x:lx,y:gy+10,width:16,height:16,rx:3,fill:'var(--blue)','fill-opacity':0.82});
+  el('text',{x:lx+24,y:gy+23,'font-size':13,fill:'var(--ink)'},'attend 허용');
+  el('rect',{x:lx+1,y:gy+41,width:14,height:14,rx:3,fill:'none',stroke:'var(--rule)'});
+  el('text',{x:lx+24,y:gy+53,'font-size':13,fill:'var(--ink)'},'차단');
+  el('text',{x:lx,y:gy+100,'font-size':12.5,fill:'var(--ink-2)'},'앞 블록 KV는');
+  el('text',{x:lx,y:gy+118,'font-size':12.5,fill:'var(--ink-2)'},'τ와 무관하므로');
+  el('text',{x:lx,y:gy+136,'font-size':12.5,fill:'var(--ink-2)'},'한 번만 계산');
+})();
+})();
+</script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+</body>
+</html>

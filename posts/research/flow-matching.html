@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flow matching: from noise to robot actions</title>
+<meta name="description" content="A walkthrough of flow matching, from inference in π0’s action head to conditional paths, velocity parameterization, guidance and the link to diffusion">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+:root{
+  --paper:#FAFBFC; --card:#FFFFFF; --ink:#1A2233; --ink-2:#4F5B70; --rule:#DCE1EA;
+  --blue:#2F54C8; --green:#1F8A5B; --orange:#D2691A; --violet:#6C5FC7;
+  --hl:#FFD84A; --hl-soft:#FFF5C9; --grid:rgba(47,84,200,.075);
+  --sans:"Pretendard",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --serif:var(--sans);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0F131A; --card:#151B25; --ink:#E6EAF2; --ink-2:#A3AEC2; --rule:#2A3446;
+  --blue:#86A2F2; --green:#4CC38A; --orange:#F0994A; --violet:#A79CF0;
+  --hl:#E0B72E; --hl-soft:rgba(255,214,64,.11); --grid:rgba(134,162,242,.08); color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --paper:#0F131A; --card:#151B25; --ink:#E6EAF2; --ink-2:#A3AEC2; --rule:#2A3446;
+  --blue:#86A2F2; --green:#4CC38A; --orange:#F0994A; --violet:#A79CF0;
+  --hl:#E0B72E; --hl-soft:rgba(255,214,64,.11); --grid:rgba(134,162,242,.08); color-scheme:dark;}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.85;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:break-word}
+a{color:var(--blue);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.hero{position:relative;border-bottom:1px solid var(--rule);
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:28px 28px;overflow:hidden}
+.hero-inner{max-width:1120px;margin:0 auto;padding:72px 24px 56px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:32px;align-items:center}
+.hero h1{font-family:var(--sans);font-weight:800;font-size:clamp(44px,7vw,84px);line-height:1;letter-spacing:-.035em;margin:0 0 20px}
+.hero .sub{font-family:var(--sans);font-size:20px;line-height:1.55;color:var(--ink-2);margin:0 0 20px;max-width:30ch}
+.hero .meta{font-family:var(--sans);font-size:14px;color:var(--ink-2);margin:0}
+.hero canvas{width:100%;aspect-ratio:1.25;display:block}
+.hero .cap{font-family:var(--sans);font-size:13px;color:var(--ink-2);margin:6px 0 0;text-align:right}
+@media (max-width:820px){.hero-inner{grid-template-columns:1fr;padding:48px 20px 32px}}
+main{max-width:720px;margin:0 auto;padding:40px 22px 96px}
+h2{font-family:var(--sans);font-weight:750;font-size:30px;line-height:1.25;letter-spacing:-.02em;margin:72px 0 18px}
+h2 .n{color:var(--blue);margin-right:.35em;font-variant-numeric:tabular-nums}
+h3{font-family:var(--sans);font-weight:700;font-size:21px;line-height:1.35;margin:40px 0 10px}
+p{margin:0 0 1.15em}
+.toc{font-family:var(--sans);font-size:15.5px;line-height:1.7;border:1px solid var(--rule);border-radius:12px;padding:18px 22px;background:var(--card)}
+.toc ol{margin:6px 0 0;padding-left:22px}
+.toc a{text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.lead{font-size:19px}
+.memo{font-family:var(--sans);font-size:15.5px;line-height:1.75;margin:26px 0;padding:14px 18px 14px 18px;background:var(--hl-soft);border-left:5px solid var(--hl);border-radius:0}
+.memo b.tag{display:inline-block;font-weight:700;margin-right:8px}
+.memo p{margin:0 0 .6em}.memo p:last-child{margin:0}
+.fix{font-family:var(--sans);font-size:15.5px;line-height:1.75;margin:-14px 0 26px;padding:14px 18px;border:1px solid var(--rule);border-left:5px solid var(--green);border-radius:0;background:var(--card)}
+.fix b.tag{color:var(--green);font-weight:700;margin-right:8px}
+.fix p{margin:0 0 .6em}.fix p:last-child{margin:0}
+.key{background:var(--hl-soft);border-radius:10px;padding:4px 14px;margin:18px 0}
+.thm{border:1px solid var(--rule);border-radius:12px;padding:16px 20px;margin:22px 0;background:var(--card)}
+.thm .h{font-family:var(--sans);font-weight:700;display:block;margin-bottom:4px}
+.proof{font-size:16.5px;color:var(--ink);border-left:2px solid var(--rule);padding-left:16px;margin:0 0 22px}
+.proof .h{font-family:var(--sans);font-weight:700;font-size:15px;color:var(--ink-2)}
+.katex-display{overflow-x:auto;overflow-y:hidden;padding:4px 0}
+figure{margin:34px -40px;padding:20px;border:1px solid var(--rule);border-radius:14px;background:var(--card)}
+@media (max-width:820px){figure{margin:30px 0;padding:14px}}
+figcaption{font-family:var(--sans);font-size:14px;line-height:1.65;color:var(--ink-2);margin-top:12px}
+figcaption b{color:var(--ink);font-weight:700}
+.ctl{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:var(--sans);font-size:14px;color:var(--ink-2);margin:0 0 14px}
+.ctl input[type=range]{flex:1;min-width:150px;accent-color:var(--blue)}
+.ctl output{font-weight:700;color:var(--ink);min-width:44px;font-variant-numeric:tabular-nums}
+button{font-family:var(--sans);font-size:14px;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--ink-2)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.pair canvas{width:100%;aspect-ratio:1;display:block;border:1px solid var(--rule);border-radius:10px}
+.plab{font-family:var(--sans);font-size:14.5px;font-weight:700;margin:0 0 6px}
+.plab span{font-weight:400;color:var(--ink-2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--sans);font-size:13px;color:var(--ink-2);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.stat{font-family:var(--sans);font-size:14px;color:var(--ink-2);margin:10px 0 0}
+.stat b{color:var(--ink);font-variant-numeric:tabular-nums}
+.algo{font-family:var(--sans);font-size:15.5px;line-height:1.8;border:1px solid var(--rule);border-radius:12px;background:var(--card);padding:16px 20px;margin:22px 0}
+.algo .h{font-weight:700;display:block;margin-bottom:6px}
+.algo ol{margin:0;padding-left:22px}
+.tbl-wrap{overflow-x:auto;margin:22px 0}
+table{border-collapse:collapse;font-family:var(--sans);font-size:15px;line-height:1.55;min-width:560px;width:100%}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:700;border-bottom:2px solid var(--ink-2)}
+.refs{font-family:var(--sans);font-size:14.5px;line-height:1.7;padding-left:22px}
+.refs li{margin-bottom:6px}
+svg text{font-family:var(--sans)}
+footer{font-family:var(--sans);font-size:13.5px;color:var(--ink-2);border-top:1px solid var(--rule);margin-top:64px;padding-top:18px}
+@media (max-width:560px){body{font-size:16.5px}h2{font-size:25px}}
+details.deep{border:1px solid var(--rule);border-radius:12px;margin:20px 0 28px;background:var(--card)}
+details.deep>summary{font-family:var(--sans);font-weight:700;font-size:15.5px;padding:12px 18px;cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline}
+details.deep>summary::-webkit-details-marker{display:none}
+details.deep>summary::before{content:"+";color:var(--blue);font-weight:800;width:12px}
+details.deep[open]>summary::before{content:"−"}
+details.deep>summary span{font-weight:400;color:var(--ink-2);font-size:14px}
+details.deep .body{padding:2px 20px 14px;font-size:16.5px;border-top:1px solid var(--rule)}
+details.deep .body>*:first-child{margin-top:14px}
+.oneline{font-family:var(--sans);font-size:17px;font-weight:600;border-top:2px solid var(--ink);border-bottom:1px solid var(--rule);padding:14px 0;margin:28px 0}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div>
+      <h1>Flow<br>matching</h1>
+      <p class="sub">From noise to robot actions: conditional paths, velocity fields, and π0’s action head</p>
+      <p class="meta">VLA study notes, September 2026</p>
+    </div>
+    <div>
+      <canvas id="hero" width="1000" height="800" aria-label="Animation of Gaussian noise particles flowing along a learned velocity field into eight data clusters" role="img"></canvas>
+      <p class="cap">Gaussian noise moving along the velocity field v(x, t) into the data distribution</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<p class="lead">VLAs such as π0 generate robot actions by "starting from noise and adding velocity a few times." This post follows that process in the same order as my handwritten study notes. First we walk through the three steps a robot takes to produce an action, and then we turn to the question: why predict a velocity at all?</p>
+
+<p>How to read it: yellow boxes are my original notes, and green boxes refine them into something more precise. Proofs and derivations are folded into <b>Go deeper</b> boxes, so if you only want the main thread you can skip them and the text still flows. Every figure is computed live in your browser, so try moving the sliders as you read.</p>
+
+<nav class="toc" aria-label="Contents">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#s0">The big picture: letting noise flow into actions</a></li>
+    <li><a href="#s1">Step 1. Start from noise</a></li>
+    <li><a href="#s2">Step 2. Read the observation once with the VLM</a></li>
+    <li><a href="#s3">Step 3. Integrate by adding velocity</a></li>
+    <li><a href="#s4">Why predict a velocity?</a></li>
+    <li><a href="#s5">What makes it good</a></li>
+    <li><a href="#s6">Compared with diffusion</a></li>
+    <li><a href="#s7">Summary</a></li>
+  </ol>
+</nav>
+
+<h2 id="s0"><span class="n">0</span>The big picture: letting noise flow into actions</h2>
+
+<p>Look at the figure at the top again. Points bunched in the middle (Gaussian noise) flow outward and arrive at eight clusters (the data). At every instant, each point follows an arrow telling it which direction to move from where it currently is, and how fast. The collection of all these arrows is called a <b>velocity field</b> \(v(x,t)\).</p>
+
+<p>In one sentence, flow matching is a way to learn this velocity field with a neural network. Once you know the field, you can generate data by starting from noise and moving along the arrows a little at a time. For a robot, the "data" is the trajectory of actions it is about to execute.</p>
+
+<p>Throughout this post, time is written \(t\) or \(\tau\), with <b>0 being noise and 1 being data (actions)</b>. In the VLA sections I use \(\tau\), as the π0 paper does, to avoid confusion with the robot's control time step.</p>
+
+<details class="deep"><summary>Go deeper <span>The precise statement with ODEs and the continuity equation</span></summary><div class="body">
+<p>Moving along a velocity field is an ordinary differential equation (ODE):</p>
+$$\frac{d}{dt}\,\psi_t(x) = v_t\big(\psi_t(x)\big),\qquad \psi_0(x)=x.$$
+<p>\(\psi_t\) is called the flow. The distribution obtained by transporting the noise distribution \(p_0=\mathcal N(0,I)\) along the flow is written \(p_t=[\psi_t]_\#\,p_0\), and the goal is for \(p_1\) to equal the data distribution \(q\).</p>
+<p>The velocity field and the evolving distribution are tied together by the continuity equation, since probability mass is neither created nor destroyed but only moves along the velocity:</p>
+$$\frac{\partial p_t(x)}{\partial t} + \nabla\cdot\big(p_t(x)\,v_t(x)\big) = 0.$$
+<p>When this holds we say "\(v_t\) generates \(p_t\)." A model whose velocity field is a neural network is called a continuous normalizing flow (CNF). CNFs were originally trained by maximum likelihood, which requires solving the ODE during training and is expensive. Flow matching trains them with plain regression and no simulation.</p>
+</div></details>
+
+<h2 id="s1"><span class="n">1</span>Step 1. Start from noise</h2>
+
+<div class="memo"><b class="tag">My notes</b>
+<p>Step 1. Sample the initial noise at \(\tau=0\). Sample Gaussian noise \(\epsilon\sim\mathcal N(0,I)\) that carries no meaningful information. This noise becomes the starting point of inference, \(a_0=\epsilon\).</p></div>
+
+<p>Exactly as written. One addition: the robot does not produce a single action for one instant, but a bundle of actions for the next \(H\) steps. This is called an <b>action chunk</b>, and in π0, \(H=50\).</p>
+
+$$\mathbf A_t=[\mathbf a_t,\mathbf a_{t+1},\dots,\mathbf a_{t+H-1}]\in\mathbb R^{H\times d_a}$$
+
+<p>So the starting noise is a matrix of the same shape, \(\mathbf A^{0}=\epsilon\in\mathbb R^{H\times d_a}\). Think of it as a trajectory whose 50 waypoints are scattered at random.</p>
+
+<h2 id="s2"><span class="n">2</span>Step 2. Read the observation once with the VLM</h2>
+
+<div class="memo"><b class="tag">My notes</b>
+<p>Step 2. Compute VLM backbone features and cache the KV (run once). o: camera images, ℓ: language instruction → VLM backbone → vision-language features. KV caching: vision-language representation ← masking → action generation (like a one-way street). So the model computes the vision-language key-value (KV) features only once → cached in memory, reused at every later integration step.</p></div>
+
+<p>π0 has two parts: a large <b>VLM backbone</b> (PaliGemma, about 3B parameters) that understands images and language, and a small <b>action expert</b> (about 300M) dedicated to actions. They have separate weights but share the transformer's attention.</p>
+
+<p>The "one-way street" in my notes is the key idea. The attention mask is set up as below, so action tokens can see the image and language tokens, but image and language tokens cannot see the action tokens.</p>
+
+<figure id="fig-mask">
+  <svg id="mask-svg" viewBox="0 0 640 330" width="100%" role="img" aria-labelledby="mask-t mask-d"><title id="mask-t">Blockwise causal attention mask in π0</title><desc id="mask-d">Rows are query tokens and columns are key tokens. Image and language tokens attend only to each other, the state token attends to the prefix and itself, and action tokens attend to everything</desc></svg>
+  <figcaption><b>Figure 1.</b> Rows are queries, columns are keys. Only filled cells allow attention. The rows of the image-language block have every later-block column empty, so the hidden states of this block do not depend on \(\mathbf A_t^\tau\) or \(\tau\) at all.</figcaption>
+</figure>
+
+<p>As a result, the image and language computations come out exactly the same no matter how the actions change. During Step 3 the action is rewritten ten times while this part never changes, so it can be computed once, stored (KV caching), and reused. The heavy 3B model runs once and only the light 300M model runs ten times, which is why it is fast.</p>
+
+<div class="fix"><b class="tag">Refinement</b>
+<p>The direction of the block matters. If image and language tokens could see action tokens, their computations would change every time the actions change, and reusing the cache would give the wrong answer. Thanks to the mask, caching is not an approximation but exactly the same computation. The robot state \(\mathbf q_t\) is given its own block for the same reason, so it can be cached too.</p></div>
+
+<details class="deep"><summary>Go deeper <span>Why caching is exact, and its cost</span></summary><div class="body">
+<p>Split the tokens into three blocks \([\text{images, language}],\ [\mathbf q_t],\ [\mathbf A^\tau]\). Each block attends only to itself and earlier blocks (bidirectionally within a block). Then at layer \(\ell\), the prefix hidden states \(h^\ell_P\) are functions of the prefix inputs alone, and so \(K^\ell_P,V^\ell_P\) are independent of \(\tau\) and \(\mathbf A^\tau\). At each integration step, computing \(Q,K,V\) only for the action tokens and attending over \([K_P;K_A],[V_P;V_A]\) is mathematically identical to recomputing everything.</p>
+<p>With prefix length \(L_P\), \(L_A=H\) action tokens and \(N\) integration steps, the pass through the VLM weights happens once (\(O(L_P^2)\) attention), while the action expert runs \(N\) times (\(O(N L_A(L_P+L_A))\)).</p>
+<p>Each action token is made by embedding a waypoint with a linear layer, combining it with a sinusoidal embedding of \(\tau\), and passing the result through an MLP. At the output, a linear layer reads a velocity vector from each token. A side benefit: the pretrained VLM representation is not contaminated by noisy action tokens.</p>
+</div></details>
+
+<h2 id="s3"><span class="n">3</span>Step 3. Integrate by adding velocity</h2>
+
+<div class="memo"><b class="tag">My notes</b>
+<p>Step 3. Numerical integration loop (\(\tau=0\to1\), repeated). According to a fixed number of steps \(N\), increase \(\tau\) from 0 to 1 by \(\Delta\tau=1/N\) using Euler's method. ① Feed the current state \(a_{\tau_k}\), the cached KV, and the current time step \(\tau_k\) into the action head ② predict \(v_\theta(a_{\tau_k},o,\ell,\tau_k)\) ③ \(a_{\tau_{k+1}}=a_{\tau_k}+\Delta\tau\cdot v_\theta\) ④ final action trajectory at \(\tau=1\) → action chunk (noise fully removed).</p></div>
+
+<p>The flow in my notes is correct. Euler's method repeats "move for \(\Delta\tau\) at the current velocity." π0 uses \(N=10\), moving ten times with \(\Delta\tau=0.1\).</p>
+
+<div class="key">$$\mathbf A^{\tau_{k+1}}=\mathbf A^{\tau_k}+\Delta\tau\;v_\theta(\mathbf A^{\tau_k},\mathbf o_t,\tau_k),\qquad k=0,1,\dots,N-1$$</div>
+
+<div class="algo"><span class="h">One inference call, in order</span>
+<ol>
+<li>Pass the images, language and state through the VLM once and cache the KV. (Step 2)</li>
+<li>Sample \(\mathbf A^{0}=\epsilon\sim\mathcal N(0,I)\). (Step 1)</li>
+<li>Repeat ten times: the action expert predicts a velocity, and the action moves by \(0.1\times\) that velocity. (Step 3)</li>
+<li>\(\mathbf A^{1}\) is the action chunk. The robot executes the first part of it, then starts again from step 1 with a new observation.</li>
+</ol></div>
+
+<details class="deep"><summary>Go deeper <span>Boundary conditions and the code's time convention</span></summary><div class="body">
+<p>The time fed to the model at the last step is \(\tau_{N-1}=1-\Delta\tau\), so the model is never evaluated at \(\tau=1\) during integration. As we will see, the velocity field becomes singular like \(1/(1-\tau)\) as \(\tau\to1\), so this matters.</p>
+<p>The public implementation, openpi, uses the opposite time direction from this post: \(t=1\) is noise and \(t=0\) is the action, with \(x_t=t\,\epsilon+(1-t)\mathbf A\), target velocity \(\epsilon-\mathbf A\), and sampling that starts at \(t=1\) and steps with \(dt=-1/N\). Substituting \(t=1-\tau\) and flipping the sign gives exactly the same equations, but mixing formulas from the paper and the code can break everything with a single sign.</p>
+</div></details>
+
+<h2 id="s4"><span class="n">4</span>Why predict a velocity?</h2>
+
+<div class="memo"><b class="tag">My notes</b>
+<p>\(a_\tau=\tau a+(1-\tau)\epsilon\) … linear interpolation. \(\dfrac{da_\tau}{d\tau}=a-\epsilon=u\). When walking straight at constant speed from the noise point \(\epsilon\) to the target \(a\), the direction and velocity to follow is exactly \(u=a-\epsilon\). ∴ Given the current position \(a_\tau\) and the camera/language information, the model \(v_\theta\) is trained to match the target velocity \(u=a-\epsilon\).</p></div>
+
+<p>Now for how the \(v_\theta\) used in Step 3 is trained. The description in my notes is the training method itself. Take one ground-truth action chunk \(\mathbf A\) from the demonstrations, sample noise \(\epsilon\) and a time \(\tau\), and form a point on the straight line between them. Then reduce the error between the model's predicted velocity at that point and \(\mathbf A-\epsilon\).</p>
+
+<div class="key">$$\mathbf A^\tau=\tau\,\mathbf A+(1-\tau)\,\epsilon,\qquad
+\mathcal L(\theta)=\mathbb E\,\big\lVert v_\theta(\mathbf A^\tau,\mathbf o_t,\tau)-(\mathbf A-\epsilon)\big\rVert^2$$</div>
+
+<p>No ODE solving, no likelihood computation. It is just regression, and that is why flow matching is easy to train.</p>
+
+<h3>But there is a catch</h3>
+
+<p>More than one line passes through the same point. Lines from different (noise, target) pairs can pass through the same point at the same time, and they point in different directions. When one point has several correct answers, a model that minimizes squared error ends up outputting <b>the average of those answers</b>.</p>
+
+<p>So the velocity the model actually learns is not the velocity of any individual line but an average velocity. In the figure below, the left panel shows the lines used in training, and the right panel shows the velocity field formed by averaging them, along with trajectories that follow it. Move the slider and you will see that the trajectories on the right bend instead of staying straight, and never cross each other.</p>
+
+<figure id="fig-cond">
+  <div class="ctl">
+    <button type="button" id="c-play">Play</button>
+    <label for="c-t">Time t</label>
+    <input type="range" id="c-t" min="0" max="1" step="0.005" value="0">
+    <output id="c-tout" for="c-t">0.00</output>
+    <button type="button" id="c-new">Resample</button>
+  </div>
+  <div class="pair">
+    <div><p class="plab">Conditional paths used in training <span>straight, crossing</span></p><canvas id="c-left" width="620" height="620" aria-label="Straight paths joining noise and data pairs"></canvas></div>
+    <div><p class="plab">Marginal velocity field and ODE trajectories <span>curved, never crossing</span></p><canvas id="c-right" width="620" height="620" aria-label="Marginal velocity field arrows and integrated trajectories"></canvas></div>
+  </div>
+  <div class="legend"><span><i style="background:var(--violet)"></i>Noise x₀</span><span><i style="background:var(--green)"></i>Data x₁</span><span><i style="background:var(--orange)"></i>Current position xₜ</span><span><i style="background:var(--ink-2)"></i>Marginal velocity field</span></div>
+  <figcaption><b>Figure 2.</b> Two-dimensional data made of eight clusters. The left panel joins pairs drawn from the independent coupling with straight lines and marks \(x_t=(1-t)x_0+tx_1\). The velocity field on the right is not a neural network: it is the exact optimum of \(\mathcal L_{\mathrm{CFM}}\), computed with the formula in the "Go deeper" box below, and the particles are integrated along it with 200 Euler steps.</figcaption>
+</figure>
+
+<div class="fix"><b class="tag">Refinement</b>
+<p>"Walking straight" describes the path of a single pair built during training. What the model learns is the average of many lines, so the trajectory it actually follows at inference time bends. And since the velocity at a given location is a single value, trajectories cannot cross. The lines that used to cross now bend to avoid one another.</p></div>
+
+<details class="deep"><summary>Go deeper <span>Why learning the average is fine: the two theorems of conditional flow matching</span></summary><div class="body">
+<p>What we really want is the velocity field \(u_t(x)\) that transports the whole distribution. Regressing it directly gives</p>
+$$\mathcal L_{\mathrm{FM}}(\theta)=\mathbb E_{t,\;x\sim p_t}\big\lVert v_\theta(x,t)-u_t(x)\big\rVert^2,$$
+<p>which cannot be computed since \(u_t\) is unknown. Lipman et al. (2023) first define a path \(p_t(x\mid x_1)\) and velocity \(u_t(x\mid x_1)\) conditioned on a single data sample \(x_1\), and then define the whole by mixing them:</p>
+$$p_t(x)=\int p_t(x\mid x_1)q(x_1)\,dx_1,\qquad u_t(x)=\int u_t(x\mid x_1)\,\frac{p_t(x\mid x_1)q(x_1)}{p_t(x)}\,dx_1.$$
+<p>The fraction is the posterior \(p(x_1\mid x_t=x)\). So \(u_t(x)\) is "a weighted average of the conditional velocities passing through \(x\)," which is precisely the "average velocity" in the main text.</p>
+<div class="thm"><span class="h">Theorem 1</span>If each \(u_t(\cdot\mid x_1)\) generates \(p_t(\cdot\mid x_1)\), then \(u_t\) generates \(p_t\).</div>
+<p><b>Proof.</b> \(\partial_tp_t(x)=\int\partial_tp_t(x\mid x_1)q\,dx_1=-\int\nabla\cdot(p_t(x\mid x_1)u_t(x\mid x_1))q\,dx_1=-\nabla\cdot(p_t(x)u_t(x))\). The last equality follows from the definition of \(u_t\). \(\square\)</p>
+<p>Now write the computable conditional objective:</p>
+$$\mathcal L_{\mathrm{CFM}}(\theta)=\mathbb E_{t,\;x_1\sim q,\;x\sim p_t(\cdot\mid x_1)}\big\lVert v_\theta(x,t)-u_t(x\mid x_1)\big\rVert^2.$$
+<div class="thm"><span class="h">Theorem 2</span>\(\nabla_\theta\mathcal L_{\mathrm{FM}}=\nabla_\theta\mathcal L_{\mathrm{CFM}}\). The two losses differ only by a constant independent of \(\theta\).</div>
+<p><b>Proof.</b> Expanding the squares, the \(\lVert v_\theta\rVert^2\) terms agree because \(\mathbb E_{q(x_1)p_t(x\mid x_1)}=\mathbb E_{p_t(x)}\), and the cross terms agree because \(\mathbb E_{p_t(x)}\langle v_\theta,u_t(x)\rangle=\int\langle v_\theta,\int u_t(x\mid x_1)p_t(x\mid x_1)q\,dx_1\rangle dx=\mathbb E_{q,p_t(x\mid x_1)}\langle v_\theta,u_t(x\mid x_1)\rangle\). The remaining terms do not depend on \(\theta\). \(\square\)</p>
+<p>For the linear interpolation in my notes, \(x_t=tx_1+(1-t)x_0\), we get \(p_t(x\mid x_1)=\mathcal N(tx_1,(1-t)^2I)\), and the conditional velocity as a function of position is \(u_t(x\mid x_1)=(x_1-x)/(1-t)\). Plugging in a point on the path gives \(x_1-x_0\), matching the notes. This path is the \(\sigma_{\min}\to0\) case of Lipman et al.'s OT path and coincides with the linear interpolation of rectified flow (Liu et al., 2023).</p>
+<p><b>The velocity field in Figure 2.</b> When the data is a finite set \(\{x^{(i)}\}\), the average velocity can be computed exactly:</p>
+$$w_i\propto\exp\!\Big(-\frac{\lVert x-t\,x^{(i)}\rVert^2}{2(1-t)^2}\Big),\qquad u_t(x)=\frac{\sum_iw_i\,x^{(i)}-x}{1-t}.$$
+<p>The figure is drawn from this formula, with no neural network. Following this optimum to the end always lands exactly on one of the training points. In other words, a model that drives the loss perfectly to its minimum only reproduces its training data, and real networks produce new samples precisely because they cannot follow this solution exactly. Also, as \(t\to1\) the denominator goes to zero and the field becomes singular.</p>
+<p><b>Why trajectories never cross.</b> If the velocity field is Lipschitz, ODE solutions are unique, so two particles at the same point at the same time must follow the same trajectory forever after. Trajectories from different starting points therefore cannot meet.</p>
+</div></details>
+
+<h3>How is τ sampled during training?</h3>
+
+<p>π0 does not sample \(\tau\) uniformly between 0 and 1. It samples values near the noise end more often. For robot actions, the observation strongly narrows down the answer, so deciding the overall direction while there is still a lot of noise is harder than the final fine adjustments.</p>
+
+<figure id="fig-beta">
+  <svg id="beta-svg" viewBox="0 0 640 250" width="100%" role="img" aria-labelledby="beta-t beta-d"><title id="beta-t">Sampling distribution of τ in π0</title><desc id="beta-d">A curve whose density is close to 1.5 near τ = 0 and falls to 0 as τ approaches 0.999, compared with the uniform distribution</desc></svg>
+  <figcaption><b>Figure 3.</b> Distribution of \(\tau\) during training. The solid line is π0's shifted beta distribution and the dashed line is uniform. In this post's convention \(\tau=0\) is noise, so the noisy regime is trained on more often.</figcaption>
+</figure>
+
+<details class="deep"><summary>Go deeper <span>The exact form of the distribution</span></summary><div class="body">
+<p>With \(s=0.999\), \(p(\tau)=\mathrm{Beta}\big(\tfrac{s-\tau}{s};1.5,1\big)\). Normalized, \(p(\tau)=\tfrac{3}{2s}\sqrt{1-\tau/s}\ (0\le\tau\le s)\). Values \(\tau>s\) are discarded because, with an integration step larger than \(1-s\), that range is never evaluated at inference time.</p>
+</div></details>
+
+<h2 id="s5"><span class="n">5</span>What makes it good</h2>
+
+<h3>① A simpler prediction target</h3>
+
+<div class="memo"><b class="tag">My notes</b>
+<p>Because the path from noise to the answer is close to a straight line, the velocity field the model has to learn becomes much simpler and smoother.</p></div>
+
+<p>Within a single pair, the training target \(\mathbf A-\epsilon\) is a constant that does not change over time. The problem handed to the model is simple, and that is a genuine advantage.</p>
+
+<p>Another advantage is numerical stability. In fact, whether you predict the velocity, the clean action, or the noise, you can convert between them. But predicting the clean action or the noise and then converting to a velocity requires dividing by small numbers in some time ranges, which amplifies errors. Predicting the velocity directly gives the quantity needed for integration without any such division.</p>
+
+<div class="fix"><b class="tag">Refinement</b>
+<p>"The path is close to a straight line" connects to the catch in Section 4. The training target is straight, but the average velocity field the model learns is curved. Still, it is empirically known to be generally less curved than the paths diffusion produces, and that is the advantage we actually get.</p></div>
+
+<details class="deep"><summary>Go deeper <span>How the three prediction targets relate, and the score</span></summary><div class="body">
+<p>At a fixed \((x_t,t)\), the velocity \(v\), the data estimate \(\hat x_1\) and the noise estimate \(\hat x_0\) are affinely related:</p>
+$$\hat x_1=x_t+(1-t)\,v,\qquad \hat x_0=x_t-t\,v.$$
+<p>They read as "go on for the remaining time to reach the endpoint" and "go back for the elapsed time to reach the start." As losses, they differ only by a time-dependent weight:</p>
+$$\big\lVert v-(x_1-x_0)\big\rVert^2=\frac{\lVert\hat x_1-x_1\rVert^2}{(1-t)^2}=\frac{\lVert\hat x_0-x_0\rVert^2}{t^2}.$$
+<p>Predicting \(\hat x_1\) and converting with \(v=(\hat x_1-x_t)/(1-t)\) amplifies errors as \(t\to1\); predicting \(\hat x_0\) and converting with \(v=(x_t-\hat x_0)/t\) amplifies them as \(t\to0\). This is the "division by small numbers" in the main text.</p>
+<p><b>Relation to the score.</b> Since \(\nabla_x\log p_t(x\mid x_1)=-(x-tx_1)/(1-t)^2=-x_0/(1-t)\), the score is \(s(x,t)=-\mathbb E[X_0\mid X_t=x]/(1-t)\), and</p>
+$$u_t(x)=\frac{x-\mathbb E[X_0\mid X_t=x]}{t}=\frac{x+(1-t)\,s(x,t)}{t}\quad(t>0).$$
+<p>The velocity field is an affine function of the score, with coefficients that do not depend on the conditioning. This fact is used in ③ Guidance and in the comparison with diffusion in Section 6.</p>
+</div></details>
+
+<h3>② Fast inference</h3>
+
+<div class="memo"><b class="tag">My notes</b>
+<p>Constant, smooth velocity means that with far fewer integration steps you get from noise to an accurate action trajectory almost instantly.</p></div>
+
+<p>The direction is right, but there is a condition. Whether a few steps are enough depends on how straight the average trajectories are. If they are perfectly straight, one jump is exact; if they are curved, the fewer the steps, the more the samples miss the curve.</p>
+
+<p>The extreme case is interesting. What happens with exactly one step? At the start there is no information about which answer a given noise sample will go to, so the velocity the model gives is "the average direction toward all answers." As a result, every sample collapses onto a single point, the mean of the data. Try increasing the number of steps from 1 below.</p>
+
+<figure id="fig-euler">
+  <div class="ctl">
+    <label for="e-n">Integration steps N</label>
+    <input type="range" id="e-n" min="1" max="40" step="1" value="1">
+    <output id="e-nout" for="e-n">1</output>
+  </div>
+  <div class="pair">
+    <div><p class="plab">Euler trajectories <span>using the optimal field</span></p><canvas id="e-traj" width="620" height="620" aria-label="Trajectories integrated with the selected number of steps"></canvas></div>
+    <div><p class="plab">Final samples <span>t = 1</span></p><canvas id="e-final" width="620" height="620" aria-label="Distribution of final samples"></canvas></div>
+  </div>
+  <p class="stat">Mean distance from each final sample to the nearest cluster center <b id="e-dist">0</b> (cluster standard deviation 0.18)</p>
+  <figcaption><b>Figure 4.</b> Even with a perfect velocity field, discretization error remains. With N=1 every sample collapses to the data mean near the origin, and as N grows the eight modes separate. The more a trajectory bends, the further it misses with few steps.</figcaption>
+</figure>
+
+<p>Translated to a robot, this is alarming. The average of a demonstration that "goes around the obstacle on the left" and one that "goes around on the right" is a trajectory that drives straight into the obstacle. π0's 10 steps are enough in most situations, but when several strategies are possible for the same observation, cutting the steps too aggressively risks producing this kind of averaged action.</p>
+
+<div class="fix"><b class="tag">Refinement</b>
+<p>"Reaching the target almost instantly" holds only when the trajectories are straight. This is why most research on reducing the step count focuses on straightening the trajectories.</p></div>
+
+<details class="deep"><summary>Go deeper <span>The size of the error and ways to straighten trajectories</span></summary><div class="body">
+<p>The global error of Euler's method is \(O(\Delta t)\), with a constant proportional to the acceleration of the trajectory, \(\ddot x_t=\partial_tv+(\nabla_xv)v\). For straight trajectories \(\ddot x_t=0\), so a single step is exact.</p>
+<p>The one-step collapse follows from this: at \(t=0\), \(X_0\) is independent of \(X_1\), so \(u_0(x)=\mathbb E[X_1]-x\) and therefore \(x_0+u_0(x_0)=\mathbb E[X_1]\).</p>
+<p>Ways to straighten trajectories include reflow, which retrains on new (noise, output) pairs generated by the learned ODE (Liu et al., 2023); minibatch OT coupling, which pairs noise and data at minimum cost within a batch (Tong et al., 2024); and distilling a student model to produce the result of many steps in one.</p>
+</div></details>
+
+<h3>③ Guidance</h3>
+
+<p>This part was left blank in my notes. Guidance is a family of techniques that slightly modify the velocity during sampling, after training is done, to strengthen some desired property. There are two kinds.</p>
+
+<p><b>Following the condition more strongly.</b> If the language instruction is occasionally dropped during training, the model learns both "the velocity with the instruction" and "the velocity without it." At sampling time, amplifying the difference between the two yields actions that follow the instruction more faithfully, at the cost of diversity.</p>
+
+$$\tilde v=v(\cdot,\varnothing)+w\,\big(v(\cdot,c)-v(\cdot,\varnothing)\big),\qquad w>1$$
+
+<p><b>Enforcing constraints.</b> Midway through integration, you can estimate "where we will land if we keep the current velocity to the end" (\(\hat{\mathbf A}=\mathbf A^\tau+(1-\tau)v\)). If this predicted endpoint collides with something or disagrees with actions already being executed, the velocity is corrected in the direction that reduces the problem. Real-time chunking by Black et al. (2025) uses this idea so that, while inference is running, the new chunk connects smoothly with the part of the previous chunk already being executed.</p>
+
+<div class="fix"><b class="tag">Refinement</b>
+<p>Constraint guidance does not guarantee that the constraint is satisfied. The predicted endpoint is not an actual sample but an average over possibilities; early in integration it is a blurry mean that can differ from where the sample actually ends up. For safety-critical constraints, you need separate verification or correction after sampling.</p></div>
+
+<details class="deep"><summary>Go deeper <span>Why this is exactly diffusion guidance</span></summary><div class="body">
+<p>In the "Go deeper" box of ①, \(u_t=(x+(1-t)s)/t\) is an affine function of the score whose coefficients do not depend on the condition. A combination of velocities with weights summing to 1, \(\tilde v=(1-w)v_\varnothing+wv_c\), becomes \(\tilde v=(x+(1-t)\tilde s)/t\) with \(\tilde s=(1-w)s_\varnothing+ws_c\). This is the same operation as classifier-free guidance in diffusion (Ho and Salimans, 2022).</p>
+<p>Constraint guidance for a cost \(J\) is written \(\tilde v(x_t,t)=v(x_t,t)-\lambda_t\nabla_{x_t}J\big(\hat x_1(x_t)\big)\) with \(\hat x_1=x_t+(1-t)v\). Since \(\hat x_1=\mathbb E[X_1\mid X_t=x_t]\), at small \(t\) it is a mixture-of-modes average, which is the precise reason for the limitation in the refinement box.</p>
+</div></details>
+
+<h2 id="s6"><span class="n">6</span>Compared with diffusion</h2>
+
+<p>The first serious use of generative models for robot policies was Diffusion Policy (Chi et al., 2023). Diffusion repeats, dozens of times, "predict the mixed-in noise, subtract a little of it, then add a little fresh noise." Flow matching adds no fresh noise and moves deterministically along the velocity. Let us compare the two starting from the same noise and producing an action chunk.</p>
+
+<figure id="fig-chunk">
+  <div class="ctl">
+    <button type="button" id="k-play">Play</button>
+    <label for="k-p">Progress</label>
+    <input type="range" id="k-p" min="0" max="1" step="0.005" value="0">
+    <output id="k-pout" for="k-p">0%</output>
+    <button type="button" id="k-new">New noise</button>
+  </div>
+  <div class="pair">
+    <div><p class="plab">Diffusion (DDPM) <span>network calls <b id="k-n1">0</b> / 50</span></p><canvas id="k-dif" width="620" height="620" aria-label="Recovering an action chunk with DDPM"></canvas></div>
+    <div><p class="plab">Flow matching <span>network calls <b id="k-n2">0</b> / 10</span></p><canvas id="k-fm" width="620" height="620" aria-label="Recovering an action chunk with flow matching"></canvas></div>
+  </div>
+  <div class="legend"><span><i style="background:var(--green)"></i>Demonstration trajectory</span><span><i style="background:var(--orange)"></i>Current action chunk (50 waypoints)</span><span><i style="background:var(--violet)"></i>Path traced by one waypoint</span></div>
+  <figcaption><b>Figure 5.</b> The 50 waypoints of an end-effector trajectory in a 2D workspace form one action chunk. Left: 50-step DDPM with a cosine schedule. Right: 10 Euler steps of straight-path flow matching. Both use an ideal predictor that knows the answer. DDPM re-injects noise at every step, so the purple path is jagged, while flow matching follows a deterministic straight line. Because there is only one correct answer for this observation, the flow matching path is perfectly straight; with multimodal demonstrations it bends as in Figure 2.</figcaption>
+</figure>
+
+<p>The purple line (the path traced by one waypoint) makes the difference clear. Diffusion converges in a jagged way over 50 steps, while flow matching arrives in a straight line in 10. Keep in mind that this is the easy case of a single correct answer per observation, which is why the flow matching path is perfectly straight. With multiple correct answers it bends, as in Figure 2.</p>
+
+<details class="deep"><summary>Go deeper <span>They are different choices within the same framework</span></summary><div class="body">
+<p>Linear interpolation is a special case of a more general Gaussian path:</p>
+$$x_t=\alpha_t x_1+\sigma_t x_0,\qquad u_t(x_t\mid x_0,x_1)=\dot\alpha_t x_1+\dot\sigma_t x_0.$$
+<p>With \(\alpha_t=t,\sigma_t=1-t\) it is linear interpolation; plugging in the variance-preserving (VP) diffusion schedule gives the same probability path as diffusion (Lipman et al., 2023). DDPM's noise prediction (Ho et al., 2020) is \(\hat x_0\) prediction, which is score prediction. Song et al. (2021) showed that there is a deterministic ODE with the same distribution path as diffusion (the probability flow ODE), and DDIM is a way of integrating that ODE. Flow matching learns the velocity field of such an ODE directly by regression, without going through the score. In the end, the difference lies in the choice of path (\(\alpha_t,\sigma_t\)) and of prediction target.</p>
+</div></details>
+
+<h2 id="s7"><span class="n">7</span>Summary</h2>
+
+<p class="oneline">Connect noise and the answer with a straight line, learn the velocity along it by regression, and at inference time add that velocity a few times to produce an action.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Stage</th><th>What happens</th><th>Key point</th></tr></thead>
+<tbody>
+<tr><td>Step 1</td><td>\(\mathbf A^0=\epsilon\sim\mathcal N(0,I)\), size \(H\times d_a\)</td><td>Not one action but a 50-step action chunk</td></tr>
+<tr><td>Step 2</td><td>Process images, language and state once with the VLM, cache the KV</td><td>The one-way mask makes caching exact</td></tr>
+<tr><td>Step 3</td><td>\(\mathbf A\leftarrow\mathbf A+0.1\,v_\theta\), ten times</td><td>The heavy VLM runs once; only the action expert repeats</td></tr>
+<tr><td>Training</td><td>\(\lVert v_\theta-(\mathbf A-\epsilon)\rVert^2\)</td><td>The model learns the average velocity of the answers, so trajectories bend</td></tr>
+<tr><td>Advantage ①</td><td>A simple, stable training target</td><td>The target is straight; the learned field is curved</td></tr>
+<tr><td>Advantage ②</td><td>Few steps</td><td>Only when trajectories are straight; one step collapses to the mean</td></tr>
+<tr><td>Advantage ③</td><td>Guidance for conditions and constraints</td><td>Does not guarantee constraint satisfaction</td></tr>
+</tbody></table></div>
+
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li>Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, M. Le. Flow Matching for Generative Modeling. ICLR 2023. <a href="https://arxiv.org/abs/2210.02747">arXiv:2210.02747</a></li>
+<li>X. Liu, C. Gong, Q. Liu. Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow. ICLR 2023. <a href="https://arxiv.org/abs/2209.03003">arXiv:2209.03003</a></li>
+<li>M. S. Albergo, E. Vanden-Eijnden. Building Normalizing Flows with Stochastic Interpolants. ICLR 2023. <a href="https://arxiv.org/abs/2209.15571">arXiv:2209.15571</a></li>
+<li>A. Tong et al. Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal Transport. TMLR 2024. <a href="https://arxiv.org/abs/2302.00482">arXiv:2302.00482</a></li>
+<li>J. Ho, A. Jain, P. Abbeel. Denoising Diffusion Probabilistic Models. NeurIPS 2020. <a href="https://arxiv.org/abs/2006.11239">arXiv:2006.11239</a></li>
+<li>Y. Song et al. Score-Based Generative Modeling through Stochastic Differential Equations. ICLR 2021. <a href="https://arxiv.org/abs/2011.13456">arXiv:2011.13456</a></li>
+<li>J. Song, C. Meng, S. Ermon. Denoising Diffusion Implicit Models. ICLR 2021. <a href="https://arxiv.org/abs/2010.02502">arXiv:2010.02502</a></li>
+<li>J. Ho, T. Salimans. Classifier-Free Diffusion Guidance. 2022. <a href="https://arxiv.org/abs/2207.12598">arXiv:2207.12598</a></li>
+<li>C. Chi et al. Diffusion Policy: Visuomotor Policy Learning via Action Diffusion. RSS 2023. <a href="https://arxiv.org/abs/2303.04137">arXiv:2303.04137</a></li>
+<li>K. Black et al. π0: A Vision-Language-Action Flow Model for General Robot Control. 2024. <a href="https://arxiv.org/abs/2410.24164">arXiv:2410.24164</a></li>
+<li>K. Black, M. Y. Galliker, S. Levine. Real-Time Execution of Action Chunking Flow Policies. 2025.</li>
+</ol>
+
+<footer>Every figure in this post is computed in your browser. The velocity fields in the 2D examples are exact optima computed from the dataset without a neural network, and both models in Figure 5 use an ideal predictor that knows the answer.</footer>
+
+</main>
+
+
+
+<script>
+(function(){
+"use strict";
+const root=document.documentElement;
+const C=n=>getComputedStyle(root).getPropertyValue(n).trim();
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function gn(){let u=Math.random()||1e-9,v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function rgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
+function rgba(h,a){const c=rgb(h);return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
+function mix(h1,h2,t){const a=rgb(h1),b=rgb(h2);return 'rgb('+a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(',')+')';}
+function ring(n,r,sd){const d=[];for(let i=0;i<n;i++){const k=i%8,a=k*Math.PI/4;d.push([r*Math.cos(a)+sd*gn(),r*Math.sin(a)+sd*gn()]);}return d;}
+function vel(x,y,t,data){
+  const s=Math.max(1-t,0.015),s2=2*s*s,n=data.length;let m=-Infinity;const w=new Float64Array(n);
+  for(let i=0;i<n;i++){const dx=x-t*data[i][0],dy=y-t*data[i][1];w[i]=-(dx*dx+dy*dy)/s2;if(w[i]>m)m=w[i];}
+  let Z=0,ex=0,ey=0;for(let i=0;i<n;i++){const e=Math.exp(w[i]-m);Z+=e;ex+=e*data[i][0];ey+=e*data[i][1];}
+  return[(ex/Z-x)/s,(ey/Z-y)/s];
+}
+function integrate(starts,data,K){
+  const tr=[starts.map(p=>p.slice())];let cur=starts.map(p=>p.slice());
+  for(let k=0;k<K;k++){const t=k/K,dt=1/K;cur=cur.map(p=>{const v=vel(p[0],p[1],t,data);return[p[0]+v[0]*dt,p[1]+v[1]*dt];});tr.push(cur.map(p=>p.slice()));}
+  return tr;
+}
+function mapper(W,H,xr,yr){return{X:x=>(x-xr[0])/(xr[1]-xr[0])*W,Y:y=>H-(y-yr[0])/(yr[1]-yr[0])*H};}
+function dot(c,x,y,r,col){c.fillStyle=col;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();}
+function btnLabel(b,on){b.textContent=on?'Pause':'Play';}
+const redrawers=[];
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>redrawers.forEach(f=>f()));
+
+/* hero */
+(function(){
+  const cv=document.getElementById('hero');if(!cv)return;const c=cv.getContext('2d');
+  const W=cv.width,H=cv.height,m=mapper(W,H,[-5,5],[-4,4]);
+  const K=80,NP=420,FLOW=3200,HOLD=1500,FADE=700;
+  let data,tr,start=null,raf=null,visible=true;
+  function build(){data=ring(160,2.7,0.16);tr=integrate(Array.from({length:NP},()=>[gn(),gn()]),data,K);}
+  function frame(tt,alpha){
+    const vio=C('--violet'),grn=C('--green');c.clearRect(0,0,W,H);c.globalAlpha=alpha;
+    const kf=tt*K,k=Math.min(Math.floor(kf),K),f=kf-k,from=Math.max(0,k-10);
+    c.lineWidth=1.3;
+    for(let i=0;i<NP;i++){c.strokeStyle=rgba(C('--blue'),0.16);c.beginPath();c.moveTo(m.X(tr[from][i][0]),m.Y(tr[from][i][1]));for(let j=from+1;j<=k;j++)c.lineTo(m.X(tr[j][i][0]),m.Y(tr[j][i][1]));c.stroke();}
+    const col=mix(vio,grn,tt);
+    for(let i=0;i<NP;i++){const a=tr[k][i],b=tr[Math.min(k+1,K)][i];dot(c,m.X(a[0]+(b[0]-a[0])*f),m.Y(a[1]+(b[1]-a[1])*f),3.2,col);}
+    c.globalAlpha=1;
+  }
+  function staticFrame(){c.clearRect(0,0,W,H);c.lineWidth=1;c.strokeStyle=rgba(C('--blue'),0.13);
+    for(let i=0;i<NP;i++){c.beginPath();tr.forEach((p,j)=>j?c.lineTo(m.X(p[i][0]),m.Y(p[i][1])):c.moveTo(m.X(p[i][0]),m.Y(p[i][1])));c.stroke();}
+    tr[0].forEach(p=>dot(c,m.X(p[0]),m.Y(p[1]),2.4,rgba(C('--violet'),0.6)));tr[K].forEach(p=>dot(c,m.X(p[0]),m.Y(p[1]),3,C('--green')));}
+  function loop(ts){
+    if(start===null)start=ts;const e=ts-start;
+    if(e<FLOW){const u=e/FLOW;frame(u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2,1);}
+    else if(e<FLOW+HOLD)frame(1,1);
+    else if(e<FLOW+HOLD+FADE)frame(1,1-(e-FLOW-HOLD)/FADE);
+    else{build();start=ts;}
+    raf=visible?requestAnimationFrame(loop):null;
+  }
+  build();
+  if(reduce){staticFrame();redrawers.push(staticFrame);return;}
+  new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible&&!raf){start=null;raf=requestAnimationFrame(loop);}}).observe(cv);
+})();
+
+/* fig 1: conditional vs marginal */
+(function(){
+  const L=document.getElementById('c-left'),Rt=document.getElementById('c-right');if(!L)return;
+  const cl=L.getContext('2d'),cr=Rt.getContext('2d'),W=L.width,m=mapper(W,W,[-4.2,4.2],[-4.2,4.2]);
+  const sl=document.getElementById('c-t'),out=document.getElementById('c-tout'),pb=document.getElementById('c-play');
+  const NP=240,K=200;let data,pairs,tr;
+  function build(){data=ring(240,2.6,0.18);pairs=Array.from({length:NP},()=>[[gn(),gn()],data[Math.floor(Math.random()*data.length)]]);tr=integrate(pairs.map(p=>p[0]),data,K);}
+  function draw(){
+    const t=+sl.value;out.textContent=t.toFixed(2);
+    const vio=C('--violet'),grn=C('--green'),org=C('--orange'),ink2=C('--ink-2');
+    cl.clearRect(0,0,W,W);cl.lineWidth=1;cl.strokeStyle=rgba(ink2,0.16);
+    pairs.forEach(p=>{cl.beginPath();cl.moveTo(m.X(p[0][0]),m.Y(p[0][1]));cl.lineTo(m.X(p[1][0]),m.Y(p[1][1]));cl.stroke();});
+    pairs.forEach(p=>dot(cl,m.X(p[0][0]),m.Y(p[0][1]),2.4,rgba(vio,0.5)));
+    data.forEach(d=>dot(cl,m.X(d[0]),m.Y(d[1]),2.4,rgba(grn,0.45)));
+    pairs.forEach(p=>dot(cl,m.X((1-t)*p[0][0]+t*p[1][0]),m.Y((1-t)*p[0][1]+t*p[1][1]),3.4,org));
+    cr.clearRect(0,0,W,W);const tt=Math.min(t,0.97);cr.strokeStyle=rgba(ink2,0.65);cr.lineWidth=1.3;
+    for(let gx=-3.9;gx<=3.95;gx+=0.6)for(let gy=-3.9;gy<=3.95;gy+=0.6){
+      const v=vel(gx,gy,tt,data),n=Math.hypot(v[0],v[1])||1,len=Math.min(n,3)*0.1/n;
+      const x0=m.X(gx),y0=m.Y(gy),x1=m.X(gx+v[0]*len),y1=m.Y(gy+v[1]*len),a=Math.atan2(y1-y0,x1-x0);
+      cr.beginPath();cr.moveTo(x0,y0);cr.lineTo(x1,y1);cr.moveTo(x1,y1);cr.lineTo(x1-5*Math.cos(a-0.5),y1-5*Math.sin(a-0.5));cr.moveTo(x1,y1);cr.lineTo(x1-5*Math.cos(a+0.5),y1-5*Math.sin(a+0.5));cr.stroke();}
+    data.forEach(d=>dot(cr,m.X(d[0]),m.Y(d[1]),2.4,rgba(grn,0.35)));
+    const k=Math.round(t*K);cr.strokeStyle=rgba(org,0.3);cr.lineWidth=1;
+    for(let i=0;i<NP;i++){cr.beginPath();cr.moveTo(m.X(tr[0][i][0]),m.Y(tr[0][i][1]));for(let j=2;j<=k;j+=2)cr.lineTo(m.X(tr[j][i][0]),m.Y(tr[j][i][1]));cr.lineTo(m.X(tr[k][i][0]),m.Y(tr[k][i][1]));cr.stroke();}
+    tr[k].forEach(p=>dot(cr,m.X(p[0]),m.Y(p[1]),3.4,org));
+  }
+  let on=false,raf;
+  function tick(){let v=+sl.value+0.005;if(v>=1){v=1;on=false;btnLabel(pb,false);}sl.value=v;draw();if(on)raf=requestAnimationFrame(tick);}
+  pb.addEventListener('click',()=>{on=!on;btnLabel(pb,on);if(on){if(+sl.value>=1)sl.value=0;tick();}else cancelAnimationFrame(raf);});
+  sl.addEventListener('input',draw);
+  document.getElementById('c-new').addEventListener('click',()=>{build();draw();});
+  build();draw();redrawers.push(draw);
+})();
+
+/* fig 2: Euler step count */
+(function(){
+  const A=document.getElementById('e-traj'),B=document.getElementById('e-final');if(!A)return;
+  const ca=A.getContext('2d'),cb=B.getContext('2d'),W=A.width,m=mapper(W,W,[-4.2,4.2],[-4.2,4.2]);
+  const sl=document.getElementById('e-n'),out=document.getElementById('e-nout'),dist=document.getElementById('e-dist');
+  const data=ring(200,2.6,0.18),starts=Array.from({length:300},()=>[gn(),gn()]);
+  const centers=Array.from({length:8},(_,k)=>[2.6*Math.cos(k*Math.PI/4),2.6*Math.sin(k*Math.PI/4)]);
+  function draw(){
+    const N=+sl.value;out.textContent=N;const tr=integrate(starts,data,N);
+    const vio=C('--violet'),grn=C('--green'),org=C('--orange');
+    [ca,cb].forEach(c=>{c.clearRect(0,0,W,W);data.forEach(d=>dot(c,m.X(d[0]),m.Y(d[1]),2.4,rgba(grn,0.35)));});
+    ca.lineWidth=1;ca.strokeStyle=rgba(org,0.32);
+    for(let i=0;i<starts.length;i++){ca.beginPath();tr.forEach((p,j)=>j?ca.lineTo(m.X(p[i][0]),m.Y(p[i][1])):ca.moveTo(m.X(p[i][0]),m.Y(p[i][1])));ca.stroke();}
+    starts.forEach(p=>dot(ca,m.X(p[0]),m.Y(p[1]),2.2,rgba(vio,0.55)));
+    tr.forEach((step,j)=>{if(j>0&&j<N)step.forEach(p=>dot(ca,m.X(p[0]),m.Y(p[1]),1.4,rgba(org,0.5)));});
+    tr[N].forEach(p=>dot(ca,m.X(p[0]),m.Y(p[1]),3,org));
+    tr[N].forEach(p=>dot(cb,m.X(p[0]),m.Y(p[1]),3.2,org));
+    let s=0;tr[N].forEach(p=>{s+=Math.min(...centers.map(q=>Math.hypot(p[0]-q[0],p[1]-q[1])));});
+    dist.textContent=(s/tr[N].length).toFixed(2);
+  }
+  sl.addEventListener('input',draw);draw();redrawers.push(draw);
+})();
+
+/* fig 3: diffusion vs flow matching on an action chunk */
+(function(){
+  const A=document.getElementById('k-dif'),B=document.getElementById('k-fm');if(!A)return;
+  const ca=A.getContext('2d'),cb=B.getContext('2d'),W=A.width,m=mapper(W,W,[-4,4],[-4,4]);
+  const sl=document.getElementById('k-p'),out=document.getElementById('k-pout'),pb=document.getElementById('k-play');
+  const H=50,T=50,KF=10,TRK=25;
+  const clean=Array.from({length:H},(_,i)=>{const s=i/(H-1);return[-2.6+5.2*s,-1.8+2.4*Math.sin(Math.PI*s)+1.4*s];});
+  const f0=Math.cos(0.008/1.008*Math.PI/2)**2;
+  const ab=Array.from({length:T+1},(_,t)=>Math.cos(((t/T)+0.008)/1.008*Math.PI/2)**2/f0);
+  let dif,fm;
+  function build(){
+    const z=clean.map(()=>[gn()*1.3,gn()*1.3]);
+    dif=[z.map(q=>q.slice())];let x=z.map(q=>q.slice());
+    for(let t=T;t>=1;t--){
+      const a=ab[t],ap=ab[t-1],be=Math.min(1-a/ap,0.999),al=1-be;
+      const c1=Math.sqrt(ap)*be/(1-a),c2=Math.sqrt(al)*(1-ap)/(1-a),sg=t>1?Math.sqrt(be*(1-ap)/(1-a)):0;
+      x=x.map((q,i)=>[c1*clean[i][0]+c2*q[0]+sg*gn(),c1*clean[i][1]+c2*q[1]+sg*gn()]);dif.push(x.map(q=>q.slice()));}
+    fm=[z.map(q=>q.slice())];let y=z.map(q=>q.slice());
+    for(let k=0;k<KF;k++){y=y.map((q,i)=>[q[0]+(clean[i][0]-z[i][0])/KF,q[1]+(clean[i][1]-z[i][1])/KF]);fm.push(y.map(q=>q.slice()));}
+  }
+  function poly(c,pts,col,w){c.strokeStyle=col;c.lineWidth=w;c.beginPath();pts.forEach((q,i)=>i?c.lineTo(m.X(q[0]),m.Y(q[1])):c.moveTo(m.X(q[0]),m.Y(q[1])));c.stroke();}
+  function scene(c,seq,k){
+    const grn=C('--green'),org=C('--orange'),vio=C('--violet');
+    c.clearRect(0,0,W,W);poly(c,clean,rgba(grn,0.5),6);
+    dot(c,m.X(clean[0][0]),m.Y(clean[0][1]),7,grn);c.fillStyle=grn;c.fillRect(m.X(clean[H-1][0])-8,m.Y(clean[H-1][1])-8,16,16);
+    const tr=[];for(let j=0;j<=k;j++)tr.push(seq[j][TRK]);
+    poly(c,tr,vio,1.6);tr.forEach(q=>dot(c,m.X(q[0]),m.Y(q[1]),2.5,vio));
+    poly(c,seq[k],org,1.6);seq[k].forEach(q=>dot(c,m.X(q[0]),m.Y(q[1]),3,org));
+  }
+  function draw(){
+    const v=+sl.value;out.textContent=Math.round(v*100)+'%';
+    const k1=Math.round(v*T),k2=Math.floor(v*KF+1e-9);
+    document.getElementById('k-n1').textContent=k1;document.getElementById('k-n2').textContent=k2;
+    scene(ca,dif,k1);scene(cb,fm,k2);
+  }
+  let on=false,raf;
+  function tick(){let v=+sl.value+0.004;if(v>=1){v=1;on=false;btnLabel(pb,false);}sl.value=v;draw();if(on)raf=requestAnimationFrame(tick);}
+  pb.addEventListener('click',()=>{on=!on;btnLabel(pb,on);if(on){if(+sl.value>=1)sl.value=0;tick();}else cancelAnimationFrame(raf);});
+  sl.addEventListener('input',draw);
+  document.getElementById('k-new').addEventListener('click',()=>{build();draw();});
+  build();draw();redrawers.push(draw);
+})();
+
+/* fig 4: tau density */
+(function(){
+  const svg=document.getElementById('beta-svg');if(!svg)return;const NS='http://www.w3.org/2000/svg';
+  const x0=70,x1=610,yb=200,yt=30,ymax=1.6,s=0.999;
+  const X=t=>x0+t*(x1-x0),Y=p=>yb-p/ymax*(yb-yt);
+  function el(n,a,txt){const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;svg.appendChild(e);return e;}
+  el('line',{x1:x0,y1:yb,x2:x1,y2:yb,stroke:'var(--ink-2)','stroke-width':1});
+  el('line',{x1:x0,y1:yb,x2:x0,y2:yt,stroke:'var(--ink-2)','stroke-width':1});
+  [0,0.5,1,1.5].forEach(p=>{el('line',{x1:x0-4,y1:Y(p),x2:x0,y2:Y(p),stroke:'var(--ink-2)'});el('text',{x:x0-8,y:Y(p)+4,'text-anchor':'end','font-size':12,fill:'var(--ink-2)'},p.toFixed(1));});
+  [0,0.25,0.5,0.75,1].forEach(t=>{el('line',{x1:X(t),y1:yb,x2:X(t),y2:yb+4,stroke:'var(--ink-2)'});el('text',{x:X(t),y:yb+18,'text-anchor':'middle','font-size':12,fill:'var(--ink-2)'},t);});
+  el('text',{x:X(0),y:yb+38,'text-anchor':'start','font-size':12.5,fill:'var(--ink-2)'},'τ = 0, noise');
+  el('text',{x:X(1),y:yb+38,'text-anchor':'end','font-size':12.5,fill:'var(--ink-2)'},'τ = 1, action');
+  el('line',{x1:X(0),y1:Y(1),x2:X(1),y2:Y(1),stroke:'var(--ink-2)','stroke-dasharray':'5 5','stroke-width':1.2});
+  let d='';for(let i=0;i<=300;i++){const t=i/300*s,p=1.5/s*Math.sqrt(Math.max(0,1-t/s));d+=(i?'L':'M')+X(t).toFixed(1)+' '+Y(p).toFixed(1);}
+  d+='L'+X(1).toFixed(1)+' '+Y(0).toFixed(1);
+  el('path',{d:d,fill:'none',stroke:'var(--blue)','stroke-width':2.4});
+  el('text',{x:X(0.06),y:Y(1.5)-8,'font-size':13,fill:'var(--blue)'},'π0: (3/2s)·√(1 − τ/s)');
+  el('text',{x:X(0.72),y:Y(1)-8,'font-size':13,fill:'var(--ink-2)'},'Uniform');
+})();
+
+/* fig 5: blockwise causal mask */
+(function(){
+  const svg=document.getElementById('mask-svg');if(!svg)return;const NS='http://www.w3.org/2000/svg';
+  const toks=['I₁','I₂','I₃','ℓ₁','ℓ₂','q','a₁','a₂','a₃','a₄'],blk=[0,0,0,0,0,1,2,2,2,2];
+  const cs=24,gx=210,gy=62,n=toks.length;
+  function el(nm,a,txt){const e=document.createElementNS(NS,nm);for(const k in a)e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;svg.appendChild(e);return e;}
+  el('text',{x:gx+n*cs/2,y:20,'text-anchor':'middle','font-size':13,fill:'var(--ink-2)'},'key (attended to)');
+  el('text',{x:gx-60,y:gy-14,'text-anchor':'middle','font-size':13,fill:'var(--ink-2)'},'query');
+  toks.forEach((t,i)=>{
+    el('text',{x:gx+i*cs+cs/2,y:gy-10,'text-anchor':'middle','font-size':12.5,fill:'var(--ink)'},t);
+    el('text',{x:gx-10,y:gy+i*cs+cs/2+4,'text-anchor':'end','font-size':12.5,fill:'var(--ink)'},t);
+    for(let j=0;j<n;j++){const ok=blk[j]<=blk[i];
+      el('rect',{x:gx+j*cs+1.5,y:gy+i*cs+1.5,width:cs-3,height:cs-3,rx:3,fill:ok?'var(--blue)':'none','fill-opacity':ok?0.82:0,stroke:ok?'none':'var(--rule)','stroke-width':1});}
+  });
+  [5,6].forEach(b=>{el('line',{x1:gx+b*cs,y1:gy-2,x2:gx+b*cs,y2:gy+n*cs+2,stroke:'var(--ink-2)','stroke-width':1.2});el('line',{x1:gx-2,y1:gy+b*cs,x2:gx+n*cs+2,y2:gy+b*cs,stroke:'var(--ink-2)','stroke-width':1.2});});
+  const groups=[['Image + language',0,5],['State',5,6],['Action',6,10]];
+  groups.forEach(g=>el('text',{x:gx-40,y:gy+(g[1]+g[2])/2*cs+4,'text-anchor':'end','font-size':12.5,fill:'var(--ink-2)'},g[0]));
+  const lx=gx+n*cs+36;
+  el('rect',{x:lx,y:gy+10,width:16,height:16,rx:3,fill:'var(--blue)','fill-opacity':0.82});
+  el('text',{x:lx+24,y:gy+23,'font-size':13,fill:'var(--ink)'},'attend allowed');
+  el('rect',{x:lx+1,y:gy+41,width:14,height:14,rx:3,fill:'none',stroke:'var(--rule)'});
+  el('text',{x:lx+24,y:gy+53,'font-size':13,fill:'var(--ink)'},'blocked');
+  el('text',{x:lx,y:gy+100,'font-size':12.5,fill:'var(--ink-2)'},'Prefix KV does not');
+  el('text',{x:lx,y:gy+118,'font-size':12.5,fill:'var(--ink-2)'},'depend on τ, so it');
+  el('text',{x:lx,y:gy+136,'font-size':12.5,fill:'var(--ink-2)'},'is computed once');
+})();
+})();
+</script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+</body>
+</html>

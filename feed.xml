@@ -9,9 +9,18 @@
             <link>https://www.devsangho.com</link>
         </image>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Sat, 19 Sep 2026 05:23:36 GMT</lastBuildDate>
+        <lastBuildDate>Sun, 27 Sep 2026 04:37:06 GMT</lastBuildDate>
         <atom:link href="https://www.devsangho.com/feed.xml" rel="self" type="application/rss+xml"/>
         <language><![CDATA[en]]></language>
+        <item>
+            <title><![CDATA[Flow Matching: From Noise to Robot Actions]]></title>
+            <description><![CDATA[A walkthrough of flow matching, from inference in π0's action head to conditional paths, velocity parameterization, guidance and the link to diffusion. Every figure is computed live in the browser.]]></description>
+            <link>https://www.devsangho.com/posts/research/flow-matching</link>
+            <guid isPermaLink="true">https://www.devsangho.com/posts/research/flow-matching</guid>
+            <category><![CDATA[flow-matching]]></category>
+            <category><![CDATA[vla]]></category>
+            <pubDate>Sun, 27 Sep 2026 00:00:00 GMT</pubDate>
+        </item>
         <item>
             <title><![CDATA[Web3 Decentralized Perpetual Exchange, Klimax]]></title>
             <description><![CDATA[Klimax is a decentralized perpetual futures exchange on the Klaytn network, leveraging an oracle-based architecture for zero price impact, low fees, and efficient liquidity.]]></description>
