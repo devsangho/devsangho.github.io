@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-part="oft">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OpenVLA-OFT: Predicting actions all at once</title>
+<meta name="description" content="Part 2 of the four-part VLA architecture series. Notes on how OpenVLA-OFT made OpenVLA faster with parallel decoding, action chunking, and continuous action regression, and on the effect of each component.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="OpenVLA-OFT: Predicting actions all at once">
+<meta property="og:description" content="Part 2 of the four-part VLA architecture series. Notes on how OpenVLA-OFT made OpenVLA faster with parallel decoding, action chunking, and continuous action regression, and on the effect of each component.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-2-openvla-oft">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-2-openvla-oft-en.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="OpenVLA-OFT: Predicting actions all at once (VLA Architecture Series)">
+<meta property="article:published_time" content="2026-11-07">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="OpenVLA">
+<meta property="article:tag" content="OFT">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="OpenVLA-OFT: Predicting actions all at once">
+<meta name="twitter:description" content="Part 2 of the four-part VLA architecture series. Notes on how OpenVLA-OFT made OpenVLA faster with parallel decoding, action chunking, and continuous action regression, and on the effect of each component.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-2-openvla-oft-en.png">
+<meta name="twitter:image:alt" content="OpenVLA-OFT: Predicting actions all at once (VLA Architecture Series)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">Paper</span>
+  <a href="https://arxiv.org/abs/2502.19645">Fine-Tuning Vision-Language-Action Models: Optimizing Speed and Success</a>
+  <span class="id">arXiv:2502.19645</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>OpenVLA-OFT</h1>
+  <p class="sub">Dropping tokens and predicting actions all at once</p>
+  <p class="meta">VLA Architecture Series, Part 2 of 4, November 2026</p>
+  <ul class="series" aria-label="Series">
+    <li><a href="/posts/research/vla-1-openvla">1. OpenVLA</a></li>
+    <li><span class="now">2. OpenVLA-OFT</span></li>
+    <li><a href="/posts/research/vla-3-pi0">3. π0</a></li>
+    <li><a href="/posts/research/vla-4-smolvla">4. SmolVLA</a></li>
+    <li class="lang"><a href="/posts/research/vla-2-openvla-oft-ko" lang="ko">한국어</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">OFT stands for Optimized Fine-Tuning. It is not a new pretrained model. It is a fine-tuning recipe that keeps the 7B-scale OpenVLA as it is and changes the output side. Yet this change alone raised the average LIBERO success rate from 76.5% to 97.1%.</p>
+
+<p>OFT bundles several changes together, so it is easy to lose track of which one had which effect. Let's separate three things at the start: whether the <b>input</b> includes the robot state, whether the <b>action representation</b> is discrete tokens or continuous real values, and whether the <b>generation method</b> is sequential or parallel. These three are independent design choices.</p>
+
+<nav class="toc" aria-label="Table of contents">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#s1">Action Chunking: Changing the Learning Problem</a></li>
+    <li><a href="#s2">Parallel Decoding: Not Waiting for Earlier Values</a></li>
+    <li><a href="#s3">Continuous Actions and Regression</a></li>
+    <li><a href="#s4">Added Inputs: Wrist Camera and Robot State</a></li>
+    <li><a href="#s5">OFT+: Tying Language to Visual Features with FiLM</a></li>
+    <li><a href="#s6">Results</a></li>
+    <li><a href="#s7">Limitations and the Next Part</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>Action Chunking: Changing the Learning Problem</h2>
+
+<p>Action chunking groups several future actions into a single prediction unit. If you predict a 7-dimensional action for 10 timesteps (as an example), the output changes from one vector to a matrix.</p>
+
+$$A_t=\begin{bmatrix}a_t\\a_{t+1}\\\vdots\\a_{t+9}\end{bmatrix}\in\mathbb R^{10\times7}$$
+
+<p>This does not mean telling the model in a prompt to "output 10 actions as a group." What changes is the output structure and the training labels. The ground truth is simply cut longer from the same demonstrations in the dataset.</p>
+
+$$(o_t,l)\to a_t$$
+$$(o_t,l)\to [a_t,a_{t+1},\ldots,a_{t+9}]$$
+
+<figure class="anim" data-anim="chunk"></figure>
+
+<p>The model now learns "how things will continue" instead of "what to do now." In practice, the paper uses \(K=8\) on LIBERO and \(K=25\) on ALOHA.</p>
+
+<p>The predicted length and the executed length are separate. You can predict 10 actions, execute only the first 3, and then observe again. In that case the chunk horizon is 10 and the replanning interval is 3. Looking again more often responds better to changes in the environment, but inference has to run more often. The OFT paper executed each predicted chunk open-loop to the end.</p>
+
+<h2 id="s2"><span class="n">2</span>Parallel Decoding: Not Waiting for Earlier Values</h2>
+
+<p>The difference between the sequential and parallel approaches reduces to one question. <b>Do you need the first predicted value in order to compute the second one?</b></p>
+
+<figure class="anim" data-anim="seqpar"></figure>
+
+<p>The implementation works like this. In the input slots that used to hold previous actions, you put empty action embeddings that differ only in their positional encoding. The causal mask is replaced with bidirectional attention. The language model then produces representations for all action positions in one forward pass. To lengthen the chunk, you add more empty embeddings.</p>
+
+<div class="fix"><p><b class="tag">Correction</b>At first it is easy to read this as "one VLM hidden state goes into an MLP, which produces 70 numbers that are reshaped to 10×7." That is not a bad explanation of the principle, but it differs from the actual architecture. In the paper's OFT, an empty embedding goes in at each action position, and these positions see the image, the language, and the other action positions through bidirectional attention inside Llama before going to the MLP. So the explanation that "an MLP head cannot handle relationships between actions with attention" also does not apply to OFT as stated. The attention has already happened in the language model before the MLP.</p></div>
+
+<p>Two points need care. Predicting in parallel does not remove the relationships between actions, because the model learns temporal patterns by fitting the ground-truth sequence jointly. Also, parallel <b>prediction</b> does not mean parallel <b>execution</b>. The robot executes the resulting actions in temporal order.</p>
+
+<figure class="anim" data-anim="feedback"></figure>
+
+<p>Table II shows the change in speed step by step (A100, one 224×224 image, 7-dimensional actions).</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Configuration</th><th class="num">Throughput (Hz)</th><th class="num">Latency (s)</th><th class="num">LIBERO-Long success rate</th></tr></thead>
+<tbody>
+<tr><td>OpenVLA</td><td class="num">4.2</td><td class="num">0.2396</td><td class="num">53.7%</td></tr>
+<tr><td>+ parallel decoding</td><td class="num">15.9</td><td class="num">0.0629</td><td class="num">–</td></tr>
+<tr><td>+ chunking (K=8)</td><td class="num">108.8</td><td class="num">0.0735</td><td class="num">86.5%</td></tr>
+<tr><td>+ continuous L1 regression</td><td class="num">109.7</td><td class="num">0.0729</td><td class="num">90.7%</td></tr>
+<tr class="mine"><td>+ wrist camera, robot state (OFT)</td><td class="num">71.4</td><td class="num">0.1120</td><td class="num">94.5%</td></tr>
+</tbody></table></div>
+<p class="cap">Throughput is the number of actions produced per second. With K=8, one inference produces 8 actions, so inference itself runs about 14 times per second (1/0.0729). The 26x improvement the paper reports is measured on this throughput (109.7/4.2).</p>
+
+<p>The last column shows the effects of the three axes above separately. The success rate jumps the most at the stage where parallel decoding and chunking come in. The table also shows that OFT's performance cannot be explained by a single factor.</p>
+
+<h2 id="s3"><span class="n">3</span>Continuous Actions and Regression</h2>
+
+<p>Regression outputs continuous numbers directly instead of picking one of 256 bins. OFT replaces the output embedding layer with a 4-layer MLP (ReLU) and trains it to minimize the mean L1 error on normalized actions.</p>
+
+$$\mathcal L=\frac{1}{K}\sum_{k=0}^{K-1}\left\|\hat a_{t+k}-a_{t+k}\right\|_1$$
+
+<p>Regression and action chunking are different concepts. Regression is about the training objective and the output format, while chunking is about how many future actions are predicted together. Either one can be used without the other.</p>
+
+<figure class="anim" data-anim="mlp"></figure>
+
+<details class="deep">
+<summary>Going deeper: one training step with small numbers</summary>
+<div class="body">
+<p>Consider an input \(h=[0.5,0.8]\), a target \(a^*=[0.3,0.7]\), and a linear layer \(\hat a=Wh\). With \(W=\begin{bmatrix}0.2&0.1\\0.4&0.3\end{bmatrix}\), the prediction is \([0.18,0.44]\).</p>
+$$L=\frac{(0.18-0.3)^2+(0.44-0.7)^2}{2}=0.041$$
+<p>The gradient with respect to \(W_{11}\) is \((0.18-0.3)\times0.5=-0.06\). It is negative, so increasing this weight reduces the loss. With a learning rate of 0.1, \(W_{11}\) goes from 0.2 to 0.206. The same thing happens in a head that outputs 70 numbers. The error at the fifth timestep also backpropagates through the shared weights, and as the errors at the various timesteps shrink together, the model learns the pattern of the action sequence.</p>
+<p>An MLP does not inherently know which 7 outputs belong to which timestep. The meaning is set when the loss is computed, by comparing each output position with the ground truth for its timestep.</p>
+</div>
+</details>
+
+<h3>Why L1 and Not Diffusion</h3>
+
+<p>The paper also compared a diffusion head. On LIBERO-Long, L1 reached 90.7% and diffusion (50 steps) reached 91.1%, which is nearly the same. But the latencies were 0.0729 seconds and 1.9070 seconds, a 26x difference. Reducing the inference steps makes it faster but lowers performance, to 85.7% at 2 steps and all the way to 0% at 1 step.</p>
+
+<div class="fix"><p><b class="tag">Correction</b>The explanation that "direct regression averages the two paths" applies to MSE. OFT uses L1, so it goes toward the median rather than the conditional mean. The paper also writes that L1 can mitigate noise by learning the median mode. Even so, if demonstrations turning left and turning right are mixed half and half, the problem of not settling on either path remains. The paper acknowledges that L1 can be weak on this kind of multimodal behavior. This problem is the topic of Part 3.</p></div>
+
+<h2 id="s4"><span class="n">4</span>Added Inputs: Wrist Camera and Robot State</h2>
+
+<p>Robot state (proprioception) is information about the robot's own body, such as joint angles and whether the gripper is open or closed. These values are hard to determine from cameras alone. OFT projects this state through a 2-layer GELU MLP and feeds it in as one input embedding.</p>
+
+<p>Each image produces 256 patch embeddings, so adding a wrist camera grows the visual tokens from 256 to 512. The image and state embeddings are concatenated along the sequence dimension. This change does not disturb the existing OpenVLA pipeline much.</p>
+
+$$\hat A_t=\pi_\theta(I^{\text{3rd}}_t,I^{\text{wrist}}_t,l,s_t)$$
+
+<p>Latency does rise from 0.0729 seconds to 0.1120 seconds, though. That is the price of more input tokens.</p>
+
+<h2 id="s5"><span class="n">5</span>OFT+: Tying Language to Visual Features with FiLM</h2>
+
+<p>A different problem appeared in the ALOHA bimanual tasks. When the policy receives multiple viewpoints including the wrist camera, it leans on visual correlations and ignores the language command. Without FiLM, the language-following rate on the last two tasks was 33%, the level of choosing a command at random.</p>
+
+<p>The solution is FiLM (Feature-wise Linear Modulation). Two vectors, \(\gamma\) and \(\beta\), are generated from the mean of the task command embeddings and used to modulate the visual features.</p>
+
+$$\hat F=(1+\gamma)\odot F+\beta$$
+
+<p>FiLM is inserted in each transformer block of both SigLIP and DINOv2, after self-attention and before the feedforward layer. \(\gamma\) and \(\beta\) do not differ by patch. Per hidden dimension, the same value is applied to all patches. The paper reports that modulating each patch differently actually made language following worse. Because \(\gamma\) and \(\beta\) start near 0, the \((1+\gamma)\) form preserves the pretrained activations early on.</p>
+
+<p>FiLM was used only in OFT+, meaning the ALOHA experiments. On LIBERO its effect was small (97.0% vs. 96.8%). The paper itself says it is unclear why OpenVLA's language grounding is weak only on ALOHA.</p>
+
+<h2 id="s6"><span class="n">6</span>Results</h2>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Method</th><th class="num">Spatial</th><th class="num">Object</th><th class="num">Goal</th><th class="num">Long</th><th class="num">Average</th></tr></thead>
+<tbody>
+<tr><td>π0 + FAST</td><td class="num">96.4</td><td class="num">96.8</td><td class="num">88.6</td><td class="num">60.2</td><td class="num">85.5</td></tr>
+<tr><td>π0</td><td class="num">96.8</td><td class="num">98.8</td><td class="num">95.8</td><td class="num">85.2</td><td class="num">94.2</td></tr>
+<tr class="mine"><td>OFT</td><td class="num">97.6</td><td class="num">98.4</td><td class="num">97.9</td><td class="num">94.5</td><td class="num">97.1</td></tr>
+</tbody></table></div>
+<p class="cap">LIBERO success rate (%), with third-person and wrist camera and robot state inputs. The comparison numbers come from each original paper, so this is not a fully controlled comparison. The OFT authors state this as well.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Method</th><th class="num">Fold shorts / shirt</th><th class="num">Scoop X</th><th class="num">Put X in pot</th><th class="num">Throughput (Hz)</th></tr></thead>
+<tbody>
+<tr><td>ACT</td><td class="num">100 / 94</td><td class="num">71.25</td><td class="num">23.75</td><td class="num">432.8</td></tr>
+<tr><td>Diffusion Policy</td><td class="num">100 / 100</td><td class="num">79.17</td><td class="num">30.83</td><td class="num">267.4</td></tr>
+<tr><td>RDT-1B</td><td class="num">100 / 96</td><td class="num">73.33</td><td class="num">44.17</td><td class="num">84.1</td></tr>
+<tr><td>π0</td><td class="num">100 / 100</td><td class="num">93.33</td><td class="num">42.08</td><td class="num">291.6</td></tr>
+<tr class="mine"><td>OFT+</td><td class="num">100 / 100</td><td class="num">100.00</td><td class="num">51.25</td><td class="num">77.9</td></tr>
+</tbody></table></div>
+<p class="cap">ALOHA stage-wise task completion rate (%). The first two tasks are mostly saturated.</p>
+
+<p>The last column should be read with care. In the ALOHA experiments, OFT+'s throughput is about 43x OpenVLA's 1.8 Hz, but next to ACT or π0 it sits at the lowest end. The cost of running a 7B language model as is remains.</p>
+
+<h2 id="s7"><span class="n">7</span>Limitations and the Next Part</h2>
+
+<ul>
+<li><b>Multimodal behavior.</b> L1 may fail to represent the multiple paths in the demonstrations. Conversely, the paper says diffusion risks overfitting to poor modes.</li>
+<li><b>Pretraining scale.</b> OFT is a recipe for the fine-tuning stage. Whether the effect holds under large-scale pretraining, and whether diffusion is still unnecessary in that case, has not been verified.</li>
+<li><b>Language grounding.</b> Why language following varies by task has not been explained.</li>
+</ul>
+
+<p>One question remains here. How do we handle situations where the same input can have several correct answers? Rather than dropping regression, π0 in Part 3 <b>changes what is being regressed.</b></p>
+
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li>Kim, Finn, Liang. <a href="https://arxiv.org/abs/2502.19645">Fine-Tuning Vision-Language-Action Models: Optimizing Speed and Success</a>. arXiv:2502.19645, 2025.</li>
+<li>Perez et al. <a href="https://arxiv.org/abs/1709.07871">FiLM: Visual Reasoning with a General Conditioning Layer</a>. arXiv:1709.07871, 2017.</li>
+<li>Zhao et al. <a href="https://arxiv.org/abs/2304.13705">Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware</a> (ACT). arXiv:2304.13705, 2023.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-3-pi0"><span>Next part</span>3. π0: Learning a Direction, Not an Action</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>

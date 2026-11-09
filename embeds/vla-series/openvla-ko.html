@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko" data-part="openvla">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OpenVLA: 로봇 행동을 단어처럼 예측하기</title>
+<meta name="description" content="VLA 아키텍처 4부작 1편. OpenVLA가 연속적인 로봇 행동을 256개 구간의 토큰으로 바꿔 언어모델의 다음 토큰 예측 문제로 푸는 방법을 정리했다.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="OpenVLA: 로봇 행동을 단어처럼 예측하기">
+<meta property="og:description" content="VLA 아키텍처 4부작 1편. OpenVLA가 연속적인 로봇 행동을 256개 구간의 토큰으로 바꿔 언어모델의 다음 토큰 예측 문제로 푸는 방법을 정리했다.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-1-openvla-ko">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-1-openvla-ko.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="OpenVLA: 로봇 행동을 단어처럼 예측하기 (VLA 아키텍처 4부작)">
+<meta property="article:published_time" content="2026-11-06">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="OpenVLA">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="OpenVLA: 로봇 행동을 단어처럼 예측하기">
+<meta name="twitter:description" content="VLA 아키텍처 4부작 1편. OpenVLA가 연속적인 로봇 행동을 256개 구간의 토큰으로 바꿔 언어모델의 다음 토큰 예측 문제로 푸는 방법을 정리했다.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-1-openvla-ko.png">
+<meta name="twitter:image:alt" content="OpenVLA: 로봇 행동을 단어처럼 예측하기 (VLA 아키텍처 4부작)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">논문</span>
+  <a href="https://arxiv.org/abs/2406.09246">OpenVLA: An Open-Source Vision-Language-Action Model</a>
+  <span class="id">arXiv:2406.09246</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>OpenVLA</h1>
+  <p class="sub">로봇 행동을 단어처럼 예측하기</p>
+  <p class="meta">VLA 아키텍처 4부작 1편, 2026년 11월</p>
+  <ul class="series" aria-label="시리즈">
+    <li><span class="now">1. OpenVLA</span></li>
+    <li><a href="/posts/research/vla-2-openvla-oft-ko">2. OpenVLA-OFT</a></li>
+    <li><a href="/posts/research/vla-3-pi0-ko">3. π0</a></li>
+    <li><a href="/posts/research/vla-4-smolvla-ko">4. SmolVLA</a></li>
+    <li class="lang"><a href="/posts/research/vla-1-openvla" lang="en">English</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">로봇에게 "빨간 컵을 집어"라고 말하면, 모델은 카메라 이미지와 이 문장을 받아 관절을 얼마나 움직일지 숫자로 내놓아야 한다. 이 시리즈는 그 숫자를 만드는 방식이 네 모델을 거치며 어떻게 바뀌는지 따라간다.</p>
+
+<p>공부하면서 정리한 노트이고, 구조와 수치는 각 논문 원문에서 다시 확인했다. 설명을 위해 임의로 고른 값에는 예시라고 표시했다. 네 편을 관통하는 질문은 하나다. <b>VLM이 이해한 장면 정보를 어떤 형태로 전달하고, 어떤 방식으로 연속적인 행동으로 바꾸는가?</b></p>
+
+<nav class="toc" aria-label="목차">
+  <b>목차</b>
+  <ol>
+    <li><a href="#s1">네 모델을 비교하는 세 가지 축</a></li>
+    <li><a href="#s2">구조: VLM을 그대로 정책으로 쓴다</a></li>
+    <li><a href="#s3">연속 행동을 256개 구간으로 나누기</a></li>
+    <li><a href="#s4">학습은 다음 토큰 맞히기</a></li>
+    <li><a href="#s5">Attention과 자기회귀 생성</a></li>
+    <li><a href="#s6">결과: 성능과 파인튜닝</a></li>
+    <li><a href="#s7">한계, 그리고 다음 편</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>네 모델을 비교하는 세 가지 축</h2>
+
+<p>VLA(Vision-Language-Action) 모델을 볼 때는 세 가지를 나눠서 보면 편하다. 어떤 VLM을 백본으로 쓰는가, 행동을 어떤 방식으로 만드는가, 학습과 추론에 비용이 얼마나 드는가. 시리즈에서 다룰 네 모델을 미리 표로 놓으면 다음과 같다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>모델</th><th>행동 표현과 생성</th><th>핵심 특징</th></tr></thead>
+<tbody>
+<tr class="mine"><td>OpenVLA</td><td>이산 토큰, 자기회귀 생성</td><td>VLM을 직접 로봇 정책으로 사용</td></tr>
+<tr><td>OpenVLA-OFT</td><td>연속 action chunk, 병렬 예측</td><td>빠른 파인튜닝과 제어</td></tr>
+<tr><td>π0</td><td>flow matching, 별도의 action expert</td><td>대규모 사전학습과 연속 행동 생성</td></tr>
+<tr><td>SmolVLA</td><td>경량 flow matching action expert</td><td>작은 모델, 효율적인 추론</td></tr>
+</tbody></table></div>
+
+<p>OpenVLA는 이 흐름의 출발점이다. 구조가 가장 직관적이고, 뒤의 세 모델이 무엇을 바꿨는지는 이 구조를 기준으로 봐야 잘 보인다.</p>
+
+<h2 id="s2"><span class="n">2</span>구조: VLM을 그대로 정책으로 쓴다</h2>
+
+<p>OpenVLA는 Prismatic-7B라는 VLM을 로봇 데이터로 파인튜닝한 모델이다. 행동을 만드는 별도의 네트워크가 없다. 언어모델이 문장의 다음 단어를 예측하듯, 다음 행동 토큰을 예측한다.</p>
+
+<figure>
+<div class="pipe">
+  <div class="b">카메라 이미지 (224×224)</div>
+  <div class="a">↓</div>
+  <div class="row"><div class="b">DINOv2</div><div class="b">SigLIP</div></div>
+  <div class="a">↓ 패치별 특징을 채널 방향으로 연결</div>
+  <div class="b">2층 MLP projector<small>시각 특징을 언어 임베딩 공간으로</small></div>
+  <div class="a">↓ 언어 명령 토큰과 합침</div>
+  <div class="b hot">Llama 2 7B<small>이미지 + 언어 → 행동 토큰</small></div>
+  <div class="a">↓</div>
+  <div class="b out">행동 토큰 7개<small>7차원 행동 하나, 차원마다 256개 구간 중 하나</small></div>
+</div>
+<figcaption><b>그림 1.</b> OpenVLA의 전체 구조. 시각 인코더 약 6억 파라미터에 7B 규모의 Llama 2가 붙는다.</figcaption>
+</figure>
+
+<p>시각 인코더를 두 개 쓰는 이유가 있다. 논문은 DINOv2가 공간 추론에 도움이 된다고 설명한다. 실제로 DINOv2를 뺀 비교 실험에서 평균 성공률이 45.6%에서 40.6%로 약 5포인트 떨어졌다(Bridge 데이터 전용 모델, Appendix D).</p>
+
+<h2 id="s3"><span class="n">3</span>연속 행동을 256개 구간으로 나누기</h2>
+
+<p>언어모델이 내놓을 수 있는 것은 어휘 사전 안의 토큰뿐이다. 그래서 연속적인 행동을 토큰으로 바꿔야 한다. OpenVLA는 7차원 행동의 각 차원을 256개 구간으로 나눈다.</p>
+
+<p>구간의 범위는 학습 데이터 행동값의 1%와 99% 분위수 사이다. 앞선 RT-2는 최솟값과 최댓값을 썼는데, 그러면 이상치 하나 때문에 구간 폭이 넓어져 해상도가 떨어진다. 분위수를 쓰면 이 문제가 줄어든다.</p>
+
+<p>[-1, 1]로 정규화된 값을 예로 들어 보자. 구간 하나의 폭은 \(2/256 \approx 0.0078\)이다. 값 0.173은 다음 구간에 들어간다.</p>
+
+$$k = \left\lfloor \frac{0.173 + 1}{2} \times 256 \right\rfloor = \lfloor 150.14 \rfloor = 150$$
+
+<p>모델은 0.173이라는 실수를 내놓는 대신 "150번 구간"을 고른다. 구간의 중앙값으로 되돌리면 약 0.176이 되고, 이 방식에서 생기는 오차는 최대 반 구간 폭인 약 0.004다. 논문의 데이터에서 구간 폭은 차원별 분위수 범위로 정해지므로 숫자는 달라지지만, 원리는 같다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>토큰 기반 예측</th><th>회귀 기반 예측 (2편)</th></tr></thead>
+<tbody>
+<tr><td>모델 출력</td><td>256개 구간 중 하나</td><td>연속적인 실수</td></tr>
+<tr><td>예시</td><td>150번 토큰</td><td>0.173</td></tr>
+<tr><td>대표적인 손실</td><td>cross-entropy</td><td>L1 또는 MSE</td></tr>
+<tr><td>정밀도</td><td>구간 해상도의 영향을 받음</td><td>출력값 자체는 연속적</td></tr>
+</tbody></table></div>
+
+<p>구현에서는 사소하지만 재미있는 문제가 하나 있다. Llama 토크나이저에 예약된 특수 토큰은 100개뿐이라 256개를 담을 수 없다. OpenVLA는 어휘 사전에서 가장 적게 쓰이는 마지막 256개 토큰을 행동 토큰으로 덮어쓴다.</p>
+
+<h2 id="s4"><span class="n">4</span>학습은 다음 토큰 맞히기</h2>
+
+<p>여기까지 오면 학습은 언어모델의 파인튜닝과 거의 같다. 입력은 이미지와 명령, 정답은 행동 토큰열이다. 손실은 일반적인 다음 토큰 예측의 cross-entropy이고, 행동 토큰에 대해서만 계산한다.</p>
+
+$$\mathcal L = -\sum_{i=1}^{7} \log p_\theta\!\left(k_i \mid I, l, k_1, \ldots, k_{i-1}\right)$$
+
+<p>로봇에게 프롬프트로 "관절을 이렇게 움직여"라고 지시하는 것이 아니라는 점은 짚고 넘어갈 만하다. 바뀐 것은 어휘, 라벨, 그리고 데이터다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>학습 데이터</td><td>Open X-Embodiment에서 고른 약 97만 궤적</td></tr>
+<tr><td>학습 자원</td><td>A100 GPU 64장으로 14일 (21,500 A100-시간)</td></tr>
+<tr><td>배치 크기</td><td>2048</td></tr>
+<tr><td>학습률</td><td>2e-5 고정</td></tr>
+<tr><td>학습량</td><td>27 에폭 (행동 토큰 정확도가 95%를 넘을 때까지)</td></tr>
+<tr><td>시각 인코더</td><td>고정하지 않고 함께 학습</td></tr>
+</tbody></table></div>
+
+<p>마지막 줄이 중요하다. 시각 인코더를 고정한 실험의 평균 성공률은 46.7%로, 함께 학습한 경우의 80.0%보다 크게 낮았다(표본이 작은 ablation 결과다). VLM의 시각 특징을 그대로 가져다 쓰는 것만으로는 로봇 제어에 충분하지 않다는 뜻이다.</p>
+
+<h2 id="s5"><span class="n">5</span>Attention과 자기회귀 생성</h2>
+
+<p>트랜스포머 안에서 일어나는 일을 "빨간 컵을 집어"로 따라가 보자. 이미지 패치와 단어는 모두 벡터, 즉 토큰이 된다. 각 토큰은 세 가지 벡터를 만든다. Query는 "내가 지금 찾는 정보", Key는 "내가 관련된 정보", Value는 "실제로 전달할 정보"다.</p>
+
+$$\operatorname{Attention}(Q,K,V)=\operatorname{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}+M\right)V$$
+
+<p>\(QK^\top\)가 토큰 사이의 관련도를 계산하고, softmax가 이를 가중치로 바꾼 뒤, Value를 가중합한다. 학습이 잘 되면 "빨간"이라는 토큰의 Query가 이미지의 빨간 컵 패치에 해당하는 Key와 높은 점수를 낼 수 있다. 다만 누가 그렇게 프로그래밍한 것은 아니고, 작업에 유용한 관계가 학습으로 만들어질 뿐이다.</p>
+
+<p>\(M\)은 attention mask로, 볼 수 없는 위치의 점수를 사실상 무한히 낮춘다. OpenVLA의 언어모델은 이 마스크로 아직 나오지 않은 뒤쪽 토큰을 보지 못한다. 그래서 행동은 한 토큰씩 차례로 만들어진다.</p>
+
+$$P(a_1,\ldots,a_7\mid I,l)=\prod_{i=1}^{7}P(a_i\mid I,l,a_1,\ldots,a_{i-1})$$
+
+<p>학습 데이터에는 미래의 정답이 이미 있는데 왜 가릴까? 정답을 쓰지 않겠다는 뜻이 아니다. 정답은 손실을 계산할 때 쓰고, 예측을 만드는 입력으로만 보여 주지 않는다.</p>
+
+<figure class="anim" data-anim="causal"></figure>
+
+<figure>
+<div class="lane">
+  <p class="t">한 번의 제어 시점에 생성되는 토큰</p>
+  <div class="slots"><b class="on">차원 1</b><i>→</i><b class="on">차원 2</b><i>→</i><b class="on">차원 3</b><i>→</i><b>…</b><i>→</i><b class="on">차원 7</b></div>
+</div>
+<figcaption><b>그림 2.</b> 앞 토큰이 나와야 다음 토큰을 계산할 수 있다. 7개는 미래의 일곱 시점이 아니라 <b>한 시점의 7차원 행동</b>이다.</figcaption>
+</figure>
+
+<p>여기서 말하는 되먹임은 두 종류로 나눠서 생각해야 헷갈리지 않는다.</p>
+
+<ul>
+<li><b>자기회귀적 피드백:</b> 앞서 생성한 출력값을 같은 예측 안에서 다음 출력의 조건으로 쓴다.</li>
+<li><b>제어 피드백:</b> 로봇이 행동한 결과를 새로 관측해서 다음 예측에 반영한다.</li>
+</ul>
+
+<p>두 번째는 2편의 병렬 예측 모델에도 그대로 있다. 차이는 첫 번째에 있다. 그리고 예측이 순차적이라고 해서 관절을 하나씩 움직이는 것도 아니다. 로봇은 7개 토큰이 모두 나온 뒤 완성된 행동 벡터를 실행한다.</p>
+
+<div class="oneline">OpenVLA의 추론 비용은 "행동 차원 수만큼 언어모델을 돌린다"는 구조에서 나온다.</div>
+
+<h2 id="s6"><span class="n">6</span>결과: 성능과 파인튜닝</h2>
+
+<p>당시 기준이던 폐쇄형 모델 RT-2-X(55B)와 비교한 결과가 대표적이다. 29개 과제에서 절대 성공률이 16.5포인트 높았다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>방법</th><th class="num">BridgeData V2 WidowX</th><th class="num">Google robot</th></tr></thead>
+<tbody>
+<tr><td>RT-1-X (35M)</td><td class="num">18.5 ±2.7%</td><td class="num">33.3 ±6.1%</td></tr>
+<tr><td>Octo (93M)</td><td class="num">20.0 ±2.6%</td><td class="num">26.7 ±5.8%</td></tr>
+<tr><td>RT-2-X (55B)</td><td class="num">50.6 ±3.5%</td><td class="num">78.3 ±5.4%</td></tr>
+<tr class="mine"><td>OpenVLA (7B)</td><td class="num">70.6 ±3.2%</td><td class="num">85.0 ±4.6%</td></tr>
+</tbody></table></div>
+<p class="cap">논문 표 4, 6. WidowX는 17과제 170회, Google robot은 12과제 60회. 논문은 Google robot에서는 RT-2-X와 비슷한 수준이라고 평가한다.</p>
+
+<p>이 논문의 또 다른 기여는 파인튜닝 방법이다. 소수의 시연으로 새 작업을 배울 때, 전체를 다시 학습하지 않아도 LoRA로 거의 같은 성능을 낼 수 있음을 보였다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>전략</th><th class="num">성공률</th><th class="num">학습 파라미터</th></tr></thead>
+<tbody>
+<tr><td>전체 파인튜닝</td><td class="num">69.7 ±7.2%</td><td class="num">7,188M</td></tr>
+<tr><td>마지막 층만</td><td class="num">30.3 ±6.1%</td><td class="num">465M</td></tr>
+<tr><td>시각 인코더 고정</td><td class="num">47.0 ±6.9%</td><td class="num">6,760M</td></tr>
+<tr><td>Sandwich</td><td class="num">62.1 ±7.9%</td><td class="num">914M</td></tr>
+<tr class="mine"><td>LoRA (r=32)</td><td class="num">68.2 ±7.5%</td><td class="num">97.6M</td></tr>
+</tbody></table></div>
+<p class="cap">논문 표 1. Franka-Tabletop 2과제, 전략당 33회. 이 표는 본 모델이 아니라 SigLIP만 쓰는 변형 모델의 결과다.</p>
+
+<p>전체 파라미터의 1.4%만 학습해도 성능이 거의 같다. 2편의 OFT 레시피도 이 LoRA를 그대로 가져간다.</p>
+
+<h2 id="s7"><span class="n">7</span>한계, 그리고 다음 편</h2>
+
+<p>논문이 직접 꼽는 한계와 구조에서 나오는 한계를 묶으면 다음과 같다.</p>
+
+<ul>
+<li><b>입력이 단일 이미지뿐이다.</b> 손목 카메라, 로봇 상태(proprioception), 관측 이력을 받지 않는다.</li>
+<li><b>느리다.</b> RTX 4090 한 장에서 약 6Hz로 동작한다. ALOHA처럼 50Hz로 도는 양팔 시스템에는 크게 모자란다.</li>
+<li><b>궤적의 매끄러움.</b> 좁은 범위의 정밀한 작업에서는 Diffusion Policy가 더 부드러운 궤적을 만든다.</li>
+<li><b>신뢰도.</b> 평가 작업의 성공률은 대체로 90%에 못 미친다.</li>
+</ul>
+
+<p>논문은 빠른 제어를 위한 해법으로 action chunking을 언급한다. 2편의 OpenVLA-OFT가 바로 그 방향으로, 같은 백본을 유지한 채 토큰 생성 방식을 걷어 낸다.</p>
+
+<h2 id="refs">참고문헌</h2>
+<ol class="refs">
+<li>Kim, Pertsch, Karamcheti et al. <a href="https://arxiv.org/abs/2406.09246">OpenVLA: An Open-Source Vision-Language-Action Model</a>. arXiv:2406.09246, 2024.</li>
+<li>Karamcheti et al. <a href="https://arxiv.org/abs/2402.07865">Prismatic VLMs</a>. arXiv:2402.07865, 2024.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-2-openvla-oft-ko"><span>다음 편</span>2. OpenVLA-OFT: 토큰을 버리고 행동을 한 번에 예측하기</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>

@@ -9,9 +9,45 @@
             <link>https://www.devsangho.com</link>
         </image>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Sat, 24 Oct 2026 13:13:51 GMT</lastBuildDate>
+        <lastBuildDate>Mon, 09 Nov 2026 00:58:39 GMT</lastBuildDate>
         <atom:link href="https://www.devsangho.com/feed.xml" rel="self" type="application/rss+xml"/>
         <language><![CDATA[en]]></language>
+        <item>
+            <title><![CDATA[SmolVLA: The Same Idea on a Small Budget (VLA Series 4/4)]]></title>
+            <description><![CDATA[Part 4 of a four-part series on VLA architectures. How SmolVLA keeps flow matching while shrinking the VLM, the action expert and the execution system, plus a comparison of all four models.]]></description>
+            <link>https://www.devsangho.com/posts/research/vla-4-smolvla</link>
+            <guid isPermaLink="true">https://www.devsangho.com/posts/research/vla-4-smolvla</guid>
+            <category><![CDATA[vla]]></category>
+            <category><![CDATA[smolvla]]></category>
+            <pubDate>Mon, 09 Nov 2026 00:00:00 GMT</pubDate>
+        </item>
+        <item>
+            <title><![CDATA[π0: Learning Directions Instead of Actions (VLA Series 3/4)]]></title>
+            <description><![CDATA[Part 3 of a four-part series on VLA architectures. How π0 couples a VLM with an action expert through attention, generates action chunks with flow matching, and uses masking and caching.]]></description>
+            <link>https://www.devsangho.com/posts/research/vla-3-pi0</link>
+            <guid isPermaLink="true">https://www.devsangho.com/posts/research/vla-3-pi0</guid>
+            <category><![CDATA[vla]]></category>
+            <category><![CDATA[flow-matching]]></category>
+            <pubDate>Sun, 08 Nov 2026 00:00:00 GMT</pubDate>
+        </item>
+        <item>
+            <title><![CDATA[OpenVLA-OFT: Predicting Actions All at Once (VLA Series 2/4)]]></title>
+            <description><![CDATA[Part 2 of a four-part series on VLA architectures. How parallel decoding, action chunking and continuous regression made OpenVLA fast, and what each change contributed.]]></description>
+            <link>https://www.devsangho.com/posts/research/vla-2-openvla-oft</link>
+            <guid isPermaLink="true">https://www.devsangho.com/posts/research/vla-2-openvla-oft</guid>
+            <category><![CDATA[vla]]></category>
+            <category><![CDATA[openvla]]></category>
+            <pubDate>Sat, 07 Nov 2026 00:00:00 GMT</pubDate>
+        </item>
+        <item>
+            <title><![CDATA[OpenVLA: Predicting Robot Actions Like Words (VLA Series 1/4)]]></title>
+            <description><![CDATA[Part 1 of a four-part series on VLA architectures. How OpenVLA turns continuous robot actions into 256-bin tokens and treats control as next-token prediction.]]></description>
+            <link>https://www.devsangho.com/posts/research/vla-1-openvla</link>
+            <guid isPermaLink="true">https://www.devsangho.com/posts/research/vla-1-openvla</guid>
+            <category><![CDATA[vla]]></category>
+            <category><![CDATA[openvla]]></category>
+            <pubDate>Fri, 06 Nov 2026 00:00:00 GMT</pubDate>
+        </item>
         <item>
             <title><![CDATA[Flow Matching: From Noise to Robot Actions]]></title>
             <description><![CDATA[A walkthrough of flow matching, from inference in π0's action head to conditional paths, velocity parameterization, guidance and the link to diffusion. Every figure is computed live in the browser.]]></description>

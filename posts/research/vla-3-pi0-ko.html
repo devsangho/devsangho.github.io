@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko" data-part="pi0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>π0: 행동이 아니라 방향을 학습하기</title>
+<meta name="description" content="VLA 아키텍처 4부작 3편. π0가 VLM과 action expert를 attention으로 결합하고 flow matching으로 action chunk를 만드는 구조, 그리고 마스킹과 캐싱을 정리했다.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="π0: 행동이 아니라 방향을 학습하기">
+<meta property="og:description" content="VLA 아키텍처 4부작 3편. π0가 VLM과 action expert를 attention으로 결합하고 flow matching으로 action chunk를 만드는 구조, 그리고 마스킹과 캐싱을 정리했다.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-3-pi0-ko">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-3-pi0-ko.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="π0: 행동이 아니라 방향을 학습하기 (VLA 아키텍처 4부작)">
+<meta property="article:published_time" content="2026-11-08">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="π0">
+<meta property="article:tag" content="flow matching">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="π0: 행동이 아니라 방향을 학습하기">
+<meta name="twitter:description" content="VLA 아키텍처 4부작 3편. π0가 VLM과 action expert를 attention으로 결합하고 flow matching으로 action chunk를 만드는 구조, 그리고 마스킹과 캐싱을 정리했다.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-3-pi0-ko.png">
+<meta name="twitter:image:alt" content="π0: 행동이 아니라 방향을 학습하기 (VLA 아키텍처 4부작)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">논문</span>
+  <a href="https://arxiv.org/abs/2410.24164">π0: A Vision-Language-Action Flow Model for General Robot Control</a>
+  <span class="id">arXiv:2410.24164</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>π0</h1>
+  <p class="sub">행동이 아니라 방향을 학습하기</p>
+  <p class="meta">VLA 아키텍처 4부작 3편, 2026년 11월</p>
+  <ul class="series" aria-label="시리즈">
+    <li><a href="/posts/research/vla-1-openvla-ko">1. OpenVLA</a></li>
+    <li><a href="/posts/research/vla-2-openvla-oft-ko">2. OpenVLA-OFT</a></li>
+    <li><span class="now">3. π0</span></li>
+    <li><a href="/posts/research/vla-4-smolvla-ko">4. SmolVLA</a></li>
+    <li class="lang"><a href="/posts/research/vla-3-pi0" lang="en">English</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">컵 앞에 장애물이 있다. 왼쪽으로 돌아가도 되고 오른쪽으로 돌아가도 된다. 시연 데이터에 두 경로가 반씩 있을 때, 모델은 무엇을 내놓아야 할까?</p>
+
+<p>2편의 OFT는 현재 관측에서 행동을 바로 계산한다. π0는 랜덤한 숫자에서 출발해 그 숫자들을 여러 번 고쳐서 행동을 만든다. 이번 편은 왜 그렇게 하는지, 그리고 그 과정을 맡는 action expert가 VLM과 어떻게 연결되는지를 본다.</p>
+
+<nav class="toc" aria-label="목차">
+  <b>목차</b>
+  <ol>
+    <li><a href="#s1">구조: VLM과 action expert</a></li>
+    <li><a href="#s2">Flow matching도 회귀다</a></li>
+    <li><a href="#s3">왜 굳이 노이즈에서 시작할까</a></li>
+    <li><a href="#s4">마스킹과 캐싱</a></li>
+    <li><a href="#s5">데이터와 실행</a></li>
+    <li><a href="#s6">결과</a></li>
+    <li><a href="#s7">한계, 그리고 다음 편</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>구조: VLM과 action expert</h2>
+
+<p>π0는 두 트랜스포머를 쓴다. PaliGemma에서 초기화한 약 3B 파라미터의 VLM이 이미지와 언어를 처리하고, 처음부터 학습하는 약 300M 파라미터의 action expert가 로봇 상태와 행동 후보를 처리한다. 합쳐서 3.3B이다.</p>
+
+<figure>
+<div class="pipe">
+  <div class="row"><div class="b">이미지</div><div class="b">언어</div></div>
+  <div class="a">↓</div>
+  <div class="b">PaliGemma VLM 가중치<small>약 3B, 사전학습 초기화</small></div>
+  <div class="a">↕ 두 가중치의 토큰이 self-attention에서 만난다</div>
+  <div class="b hot">Action expert 가중치<small>약 300M, 처음부터 학습</small></div>
+  <div class="a">↑</div>
+  <div class="row"><div class="b">로봇 상태</div><div class="b">노이즈 행동 + 시간 τ</div></div>
+  <div class="a">↓ 행동 토큰 출력을 선형 투영</div>
+  <div class="b out">속도 \(v_\theta\)<small>\(H \times\) 행동 차원, 여기서 \(H=50\)</small></div>
+</div>
+<figcaption><b>그림 1.</b> 입력은 각자의 가중치로 처리되지만, 두 쪽의 토큰은 트랜스포머 내부의 attention으로 상호작용한다. VLM의 출력 하나를 받아 조건으로 쓰는 구조가 아니다.</figcaption>
+</figure>
+
+<p>이름을 정리해 두자. action head는 행동 출력을 담당하는 부분을 두루 가리키는 말이고, action expert는 π0처럼 행동 토큰을 자체 가중치로 처리하는 별도의 신경망을 가리킨다. action expert는 학습 가능한 트랜스포머이지 고전적인 로봇 제어기가 아니다. VLM이 "어떤 컵을 집을지"를 다룬다면, action expert는 "그 컵을 집으려면 어떻게 움직일지"를 다룬다.</p>
+
+<p>노이즈 행동은 시간 τ와 함께 MLP를 거쳐 토큰이 된다. \(\phi\)는 τ의 사인파 인코딩이다.</p>
+
+$$\text{embed}(a^\tau,\tau)=W_3\cdot\text{swish}\!\left(W_2\cdot\text{concat}(W_1\cdot a^\tau,\ \phi(\tau))\right)$$
+
+<h2 id="s2"><span class="n">2</span>Flow matching도 회귀다</h2>
+
+<p>flow matching이 회귀를 버린 것이라고 생각하기 쉽다. 하지만 flow matching도 숫자를 맞히는 회귀 문제다. 달라진 것은 <b>회귀의 대상</b>이다.</p>
+
+<p>정답 행동이 0.8이고, 뽑은 노이즈가 -0.2라고 하자. OFT는 관측을 보고 곧바로 0.8을 맞히도록 학습한다. π0는 노이즈와 정답을 잇는 직선 위의 한 점을 만들고, 그 점에서 어느 방향으로 얼마나 가야 하는지를 맞히도록 학습한다.</p>
+
+$$A^\tau=\tau A+(1-\tau)\epsilon,\qquad \epsilon\sim\mathcal N(0,I)$$
+$$u(A^\tau\mid A)=A-\epsilon$$
+$$\mathcal L(\theta)=\mathbb E\,\big\|v_\theta(A^\tau,o_t)-u(A^\tau\mid A)\big\|^2$$
+
+<p>π0의 표기에서는 \(\tau=0\)이 노이즈, \(\tau=1\)이 데이터다. 앞의 예에서 정답 방향은 \(0.8-(-0.2)=1.0\)이다. 학습 때는 정답이 있으니 방향을 계산할 수 있지만, 추론 때는 정답이 없다. 그래서 현재 위치에서 모델이 예측한 방향으로 조금 가고, 거기서 다시 예측한다.</p>
+
+$$A^{\tau+\delta}=A^\tau+\delta\, v_\theta(A^\tau,o_t),\qquad \delta=0.1$$
+
+<figure class="anim" data-anim="flow"></figure>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>τ</th><th class="num">0</th><th class="num">0.25</th><th class="num">0.5</th><th class="num">0.75</th><th class="num">1</th></tr></thead>
+<tbody><tr><td>값 (속도 1.0으로 네 스텝 예시)</td><td class="num">-0.20</td><td class="num">0.05</td><td class="num">0.30</td><td class="num">0.55</td><td class="num">0.80</td></tr></tbody>
+</table></div>
+<p class="cap">1차원에 방향이 일정한 가장 단순한 경우다. 실제 속도장은 현재 위치, 시간, 관측에 따라 달라진다. π0는 전진 오일러 10스텝으로 적분한다.</p>
+
+<p>유도와 그림은 이 블로그의 <a href="/posts/research/flow-matching-ko">Flow matching 글</a>에 따로 정리해 두었다. 여기서는 결론만 기억해 두면 된다.</p>
+
+<div class="oneline">OFT는 최종 행동값을 회귀하고, π0는 행동을 변화시키는 속도장을 회귀한다.</div>
+
+<p>시간 τ를 뽑는 분포에도 선택이 들어 있다. π0는 균등분포 대신 \(p(\tau)=\text{Beta}(\frac{s-\tau}{s};1.5,1)\), \(s=0.999\)를 쓴다. 논문의 근거는 이렇다. 관측만으로 평균 행동을 맞히는 τ가 작은 구간이 가장 어려운 문제이므로 그쪽을 더 많이 뽑는다는 것이다. τ가 s보다 크면 뽑지 않는다.</p>
+
+<h2 id="s3"><span class="n">3</span>왜 굳이 노이즈에서 시작할까</h2>
+
+<p>처음 질문으로 돌아가자. 평균 제곱 오차로 직접 회귀하면 왼쪽과 오른쪽 경로의 평균을 낼 위험이 있고, 그 평균은 장애물 한가운데일 수 있다. (2편에서 본 것처럼 OFT의 L1은 중앙값 쪽이지만, 모드가 갈리는 문제는 남는다.)</p>
+
+<figure class="anim" data-anim="modes"></figure>
+
+<p>flow matching은 조건부 <b>분포</b>를 모델링한다. 시작 노이즈가 다르면 왼쪽 경로로 갈 수도 있고 오른쪽 경로로 갈 수도 있다. 여러 번 고치는 행위 자체가 마법은 아니다. 핵심은 분포를 학습한다는 데 있고, 반복 적분은 그 분포에서 샘플을 뽑는 계산 절차다.</p>
+
+<p>순서로 보면 OpenVLA와도 다르다. OpenVLA는 토큰을 차례로 만들지만, π0는 미래 행동 전체를 위치별 토큰으로 한꺼번에 놓고 그 전체를 여러 번 다듬는다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>OFT (L1 회귀)</th><th>π0 (flow matching)</th></tr></thead>
+<tbody>
+<tr><td>정답</td><td>행동값 자체</td><td>노이즈에서 행동으로 가는 방향</td></tr>
+<tr><td>추론</td><td>순전파 1회</td><td>VLM 1회 + action expert 10회</td></tr>
+<tr><td>출력의 성격</td><td>결정적</td><td>초기 노이즈에 따라 달라짐</td></tr>
+<tr><td>강점</td><td>빠르고 단순함</td><td>여러 행동 패턴을 표현할 수 있음</td></tr>
+</tbody></table></div>
+
+<p>그렇다면 질문이 하나 생긴다. 컵을 집을 때 정말로 여러 행동 경로가 필요한 상황이 얼마나 많을까? 최적 행동이 대체로 하나로 정해진다면 반복 계산은 낭비일 수 있다. 2편의 LIBERO 결과처럼 L1과 diffusion이 비슷하게 나온 사례도 있어서, 이는 아직 열려 있는 질문이다.</p>
+
+<h2 id="s4"><span class="n">4</span>마스킹과 캐싱</h2>
+
+<p>attention mask는 어떤 토큰이 어떤 토큰의 정보를 볼 수 있는지 정하는 규칙이다. π0는 토큰을 세 블록으로 나눈다. 블록 안에서는 서로 볼 수 있고, 뒤쪽 블록은 앞쪽을 볼 수 있지만 앞쪽은 뒤쪽을 볼 수 없다.</p>
+
+<figure class="anim" data-anim="pimask"></figure>
+
+<p>이 마스크가 왜 있는지 생각해 보면 OpenVLA와의 차이가 드러난다. 1편의 causal mask는 정답 토큰을 미리 보는 것을 막는다. 미래 행동은 학습의 <b>정답</b>으로는 쓰지만, 예측을 만드는 <b>입력</b>으로 보여 주면 안 되기 때문이다. π0는 다르다. 행동 토큰끼리는 서로 다 볼 수 있다. 여기서 마스크의 큰 역할은 이미지와 언어 토큰이 시시각각 바뀌는 노이즈 행동을 보지 못하게 하는 것이다.</p>
+
+<p>이 덕분에 캐싱이 가능해진다. 앞쪽 블록의 결과는 τ가 바뀌어도 똑같으므로, Key와 Value를 저장해 두면 10번의 적분 동안 다시 계산할 필요가 없다. 로봇 상태를 별도 블록으로 둔 것도 그 값의 KV를 캐시하기 위해서다.</p>
+
+<figure class="anim" data-anim="cache"></figure>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>단계 (RTX 4090, 카메라 3대)</th><th class="num">시간</th></tr></thead>
+<tbody>
+<tr><td>이미지 인코더</td><td class="num">14 ms</td></tr>
+<tr><td>관측 순전파</td><td class="num">32 ms</td></tr>
+<tr class="mine"><td>행동 순전파 10회 (flow 적분)</td><td class="num">27 ms</td></tr>
+<tr><td>합계 (온보드)</td><td class="num">73 ms</td></tr>
+</tbody></table></div>
+<p class="cap">논문 표 I. 원격 추론이면 네트워크 지연 13 ms가 더해져 86 ms다.</p>
+
+<p>action expert를 10번 돌리는 데 27ms밖에 걸리지 않는다. VLM을 한 번만 돌리고, action expert가 작고, 캐시까지 있기 때문이다. flow matching의 "여러 번 계산"이 곧바로 "10배 느림"을 뜻하지 않는 이유다.</p>
+
+<h2 id="s5"><span class="n">5</span>데이터와 실행</h2>
+
+<p>π0의 또 다른 특징은 대규모 다중 로봇 사전학습이다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>자체 데이터</td><td>9억 300만 타임스텝 (단일 팔 1억 600만, 양팔 7억 9,700만)</td></tr>
+<tr><td>구성</td><td>7가지 로봇 구성, 68개 작업, 전체 10,000시간 이상</td></tr>
+<tr><td>공개 데이터 비중</td><td>혼합의 9.1% (OXE, Bridge v2, DROID)</td></tr>
+<tr><td>로봇별 가중치</td><td>작업-로봇 조합 샘플 수 \(n\)에 \(n^{0.43}\)</td></tr>
+<tr><td>차원 맞춤</td><td>가장 큰 18차원에 맞춰 상태·행동을 0으로 패딩</td></tr>
+<tr><td>학습량</td><td>70만 스텝</td></tr>
+</tbody></table></div>
+
+<p>행동 차원이 다른 로봇을 18차원으로 패딩해서 하나의 모델로 학습한다. 카메라가 3대보다 적은 로봇은 없는 슬롯을 마스킹한다.</p>
+
+<p>실행 쪽에서는 \(H=50\)개를 예측하되 전부 쓰지 않는다. 20Hz 로봇은 16개(0.8초), 50Hz 로봇은 25개(0.5초)를 open-loop로 실행하고 다시 추론한다. 예측한 chunk를 겹쳐 평균내는 temporal ensembling은 논문에서 오히려 성능을 떨어뜨렸다.</p>
+
+<h2 id="s6"><span class="n">6</span>결과</h2>
+
+<p>π0 논문의 주요 평가 수치는 표가 아니라 그림으로 제시되어 있어서, 여기서는 논문의 결론만 옮긴다.</p>
+
+<ul>
+<li><b>별도 파인튜닝 없는 평가:</b> 셔츠 접기, 테이블 정리, 장보기 물건 담기, 토스터 작업에서 OpenVLA와 Octo를 앞섰고, 동일 학습량(16만 스텝) 버전도 비교 모델보다 나았다.</li>
+<li><b>언어 조건:</b> VLM 사전학습을 쓰지 않는 약 470M의 π0-small보다 유의미하게 개선됐다.</li>
+<li><b>새 작업 파인튜닝:</b> ACT, Diffusion Policy, OpenVLA, Octo와 비교해 대체로 우위를 보였다.</li>
+<li><b>긴 작업:</b> 5~20분이 걸리는 복합 작업에서 전 작업 모두 최대 점수의 50%를 넘겼다.</li>
+</ul>
+
+<p>수치로 비교한 사례는 2편의 표에 있다. OFT 논문에서 π0는 LIBERO 평균 94.2%, ALOHA의 Scoop X 과제 93.33%를 기록했다. 조건이 완전히 같은 비교는 아니라는 점도 함께 봐야 한다.</p>
+
+<h2 id="s7"><span class="n">7</span>한계, 그리고 다음 편</h2>
+
+<ul>
+<li><b>데이터 구성에 대한 이해.</b> 논문은 사전학습 데이터를 어떻게 구성해야 하는지 아직 잘 모른다고 밝힌다.</li>
+<li><b>신뢰성.</b> 모든 평가 작업이 안정적으로 동작하지는 않는다.</li>
+<li><b>모델 크기.</b> 3.3B 모델과 대규모 데이터는 소규모 환경에서 그대로 재현하기 어렵다.</li>
+</ul>
+
+<p>flow matching을 쓰면서 모델을 훨씬 작게 만들 수는 없을까? 4편의 SmolVLA가 그 시도다. VLM, action expert, 그리고 둘의 연결 방식까지 함께 다시 설계한다.</p>
+
+<h2 id="refs">참고문헌</h2>
+<ol class="refs">
+<li>Black et al. <a href="https://arxiv.org/abs/2410.24164">π0: A Vision-Language-Action Flow Model for General Robot Control</a>. arXiv:2410.24164, 2024.</li>
+<li>Lipman et al. <a href="https://arxiv.org/abs/2210.02747">Flow Matching for Generative Modeling</a>. arXiv:2210.02747, 2022.</li>
+<li>Beyer et al. <a href="https://arxiv.org/abs/2407.07726">PaliGemma: A versatile 3B VLM</a>. arXiv:2407.07726, 2024.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-4-smolvla-ko"><span>다음 편</span>4. SmolVLA: 같은 원리를 작은 예산으로</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>

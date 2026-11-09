@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" data-part="openvla">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OpenVLA: Predicting robot actions like words</title>
+<meta name="description" content="Part 1 of the four-part VLA architecture series. Notes on how OpenVLA turns continuous robot actions into tokens over 256 bins and solves control as a language model's next-token prediction problem.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="OpenVLA: Predicting robot actions like words">
+<meta property="og:description" content="Part 1 of the four-part VLA architecture series. Notes on how OpenVLA turns continuous robot actions into tokens over 256 bins and solves control as a language model's next-token prediction problem.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-1-openvla">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-1-openvla-en.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="OpenVLA: Predicting robot actions like words (VLA Architecture Series)">
+<meta property="article:published_time" content="2026-11-06">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="OpenVLA">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="OpenVLA: Predicting robot actions like words">
+<meta name="twitter:description" content="Part 1 of the four-part VLA architecture series. Notes on how OpenVLA turns continuous robot actions into tokens over 256 bins and solves control as a language model's next-token prediction problem.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-1-openvla-en.png">
+<meta name="twitter:image:alt" content="OpenVLA: Predicting robot actions like words (VLA Architecture Series)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">Paper</span>
+  <a href="https://arxiv.org/abs/2406.09246">OpenVLA: An Open-Source Vision-Language-Action Model</a>
+  <span class="id">arXiv:2406.09246</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>OpenVLA</h1>
+  <p class="sub">Predicting robot actions like words</p>
+  <p class="meta">VLA Architecture Series, Part 1 of 4, November 2026</p>
+  <ul class="series" aria-label="Series">
+    <li><span class="now">1. OpenVLA</span></li>
+    <li><a href="/posts/research/vla-2-openvla-oft">2. OpenVLA-OFT</a></li>
+    <li><a href="/posts/research/vla-3-pi0">3. π0</a></li>
+    <li><a href="/posts/research/vla-4-smolvla">4. SmolVLA</a></li>
+    <li class="lang"><a href="/posts/research/vla-1-openvla-ko" lang="ko">한국어</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">When you tell a robot "pick up the red cup," the model has to take the camera image and this sentence and output numbers saying how far to move the joints. This series follows how the way those numbers are produced changes across four models.</p>
+
+<p>These are notes I put together while studying, and I rechecked the architectures and numbers against each original paper. Values I picked arbitrarily for explanation are marked as examples. One question runs through all four parts. <b>In what form is the scene information understood by the VLM passed along, and how is it turned into continuous actions?</b></p>
+
+<nav class="toc" aria-label="Contents">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#s1">Three Axes for Comparing the Four Models</a></li>
+    <li><a href="#s2">Architecture: Using a VLM Directly as the Policy</a></li>
+    <li><a href="#s3">Splitting Continuous Actions into 256 Bins</a></li>
+    <li><a href="#s4">Training Is Next-Token Prediction</a></li>
+    <li><a href="#s5">Attention and Autoregressive Generation</a></li>
+    <li><a href="#s6">Results: Performance and Fine-Tuning</a></li>
+    <li><a href="#s7">Limitations and the Next Part</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>Three Axes for Comparing the Four Models</h2>
+
+<p>When looking at VLA (Vision-Language-Action) models, it helps to consider three things separately: which VLM serves as the backbone, how actions are produced, and how much training and inference cost. The four models covered in this series look like this in a table.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Model</th><th>Action representation and generation</th><th>Key characteristics</th></tr></thead>
+<tbody>
+<tr class="mine"><td>OpenVLA</td><td>Discrete tokens, autoregressive generation</td><td>Uses a VLM directly as the robot policy</td></tr>
+<tr><td>OpenVLA-OFT</td><td>Continuous action chunks, parallel prediction</td><td>Fast fine-tuning and control</td></tr>
+<tr><td>π0</td><td>Flow matching, separate action expert</td><td>Large-scale pretraining and continuous action generation</td></tr>
+<tr><td>SmolVLA</td><td>Lightweight flow matching action expert</td><td>Small model, efficient inference</td></tr>
+</tbody></table></div>
+
+<p>OpenVLA is the starting point of this progression. Its architecture is the most intuitive, and what the next three models changed is best seen against it.</p>
+
+<h2 id="s2"><span class="n">2</span>Architecture: Using a VLM Directly as the Policy</h2>
+
+<p>OpenVLA is a VLM called Prismatic-7B fine-tuned on robot data. There is no separate network for producing actions. It predicts the next action token the way a language model predicts the next word in a sentence.</p>
+
+<figure>
+<div class="pipe">
+  <div class="b">Camera image (224×224)</div>
+  <div class="a">↓</div>
+  <div class="row"><div class="b">DINOv2</div><div class="b">SigLIP</div></div>
+  <div class="a">↓ Per-patch features concatenated along the channel dimension</div>
+  <div class="b">2-layer MLP projector<small>Visual features into the language embedding space</small></div>
+  <div class="a">↓ Combined with language instruction tokens</div>
+  <div class="b hot">Llama 2 7B<small>Image + language → action tokens</small></div>
+  <div class="a">↓</div>
+  <div class="b out">7 action tokens<small>One 7-dimensional action, one of 256 bins per dimension</small></div>
+</div>
+<figcaption><b>Figure 1.</b> The overall architecture of OpenVLA. A 7B Llama 2 is attached to vision encoders of about 600M parameters.</figcaption>
+</figure>
+
+<p>There is a reason for using two vision encoders. The paper explains that DINOv2 helps with spatial reasoning. In a comparison experiment that removed DINOv2, the average success rate fell from 45.6% to 40.6%, a drop of about 5 points (Bridge-data-only model, Appendix D).</p>
+
+<h2 id="s3"><span class="n">3</span>Splitting Continuous Actions into 256 Bins</h2>
+
+<p>All a language model can output is tokens in its vocabulary, so continuous actions have to be turned into tokens. OpenVLA divides each dimension of the 7-dimensional action into 256 bins.</p>
+
+<p>The bins span the range between the 1st and 99th percentiles of the action values in the training data. The earlier RT-2 used the minimum and maximum, but then a single outlier can widen the bins and lower the resolution. Using percentiles reduces this problem.</p>
+
+<p>Take a value normalized to [-1, 1] as an example. One bin has width \(2/256 \approx 0.0078\). The value 0.173 falls into the following bin.</p>
+
+$$k = \left\lfloor \frac{0.173 + 1}{2} \times 256 \right\rfloor = \lfloor 150.14 \rfloor = 150$$
+
+<p>Instead of outputting the real number 0.173, the model picks "bin 150." Mapping back to the center of the bin gives about 0.176, and the error this scheme introduces is at most half a bin width, about 0.004. In the paper's data the bin width is set by each dimension's percentile range, so the numbers differ, but the principle is the same.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>Token-based prediction</th><th>Regression-based prediction (Part 2)</th></tr></thead>
+<tbody>
+<tr><td>Model output</td><td>One of 256 bins</td><td>A continuous real number</td></tr>
+<tr><td>Example</td><td>Token 150</td><td>0.173</td></tr>
+<tr><td>Typical loss</td><td>Cross-entropy</td><td>L1 or MSE</td></tr>
+<tr><td>Precision</td><td>Affected by bin resolution</td><td>The output itself is continuous</td></tr>
+</tbody></table></div>
+
+<p>The implementation has one minor but fun problem. The Llama tokenizer reserves only 100 special tokens, which cannot hold 256. OpenVLA overwrites the 256 least used tokens at the end of the vocabulary with action tokens.</p>
+
+<h2 id="s4"><span class="n">4</span>Training Is Next-Token Prediction</h2>
+
+<p>At this point, training is almost the same as fine-tuning a language model. The input is the image and the instruction, and the target is the sequence of action tokens. The loss is the usual next-token cross-entropy, computed only over the action tokens.</p>
+
+$$\mathcal L = -\sum_{i=1}^{7} \log p_\theta\!\left(k_i \mid I, l, k_1, \ldots, k_{i-1}\right)$$
+
+<p>It is worth pointing out that this does not mean instructing the robot through a prompt to "move your joints like this." What changed is the vocabulary, the labels, and the data.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Item</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Training data</td><td>About 970k trajectories selected from Open X-Embodiment</td></tr>
+<tr><td>Training resources</td><td>64 A100 GPUs for 14 days (21,500 A100-hours)</td></tr>
+<tr><td>Batch size</td><td>2048</td></tr>
+<tr><td>Learning rate</td><td>Fixed at 2e-5</td></tr>
+<tr><td>Training length</td><td>27 epochs (until action token accuracy exceeded 95%)</td></tr>
+<tr><td>Vision encoder</td><td>Not frozen, trained jointly</td></tr>
+</tbody></table></div>
+
+<p>The last row matters. The experiment with a frozen vision encoder had an average success rate of 46.7%, far below the 80.0% obtained when it was trained jointly (this is an ablation result with a small sample). This means that simply reusing the VLM's visual features as they are is not enough for robot control.</p>
+
+<h2 id="s5"><span class="n">5</span>Attention and Autoregressive Generation</h2>
+
+<p>Let's follow what happens inside the transformer using "pick up the red cup." Image patches and words all become vectors, that is, tokens. Each token produces three vectors. Query is "the information I am looking for now," Key is "the information I am related to," and Value is "the information I actually pass along."</p>
+
+$$\operatorname{Attention}(Q,K,V)=\operatorname{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}+M\right)V$$
+
+<p>\(QK^\top\) computes the relevance between tokens, softmax turns it into weights, and the Values are then summed with those weights. If training goes well, the Query of the token "red" can score highly with the Keys of the image patches covering the red cup. Nobody programmed that in, though. Relations useful for the task simply form through training.</p>
+
+<p>\(M\) is the attention mask, which effectively pushes the scores of positions that cannot be seen infinitely low. This mask keeps OpenVLA's language model from seeing later tokens that have not been generated yet. That is why an action is produced one token at a time.</p>
+
+$$P(a_1,\ldots,a_7\mid I,l)=\prod_{i=1}^{7}P(a_i\mid I,l,a_1,\ldots,a_{i-1})$$
+
+<p>The training data already contains the future answers, so why hide them? The answers are still used. They are used to compute the loss, and are only withheld from the input that produces the prediction.</p>
+
+<figure class="anim" data-anim="causal"></figure>
+
+<figure>
+<div class="lane">
+  <p class="t">Tokens generated at a single control step</p>
+  <div class="slots"><b class="on">Dim 1</b><i>→</i><b class="on">Dim 2</b><i>→</i><b class="on">Dim 3</b><i>→</i><b>…</b><i>→</i><b class="on">Dim 7</b></div>
+</div>
+<figcaption><b>Figure 2.</b> Each token can be computed only after the previous one has been produced. The 7 are not seven future time steps but <b>one 7-dimensional action at a single time step</b>.</figcaption>
+</figure>
+
+<p>To avoid confusion, the feedback involved here should be split into two kinds.</p>
+
+<ul>
+<li><b>Autoregressive feedback:</b> Previously generated outputs serve as conditions for the next output within the same prediction.</li>
+<li><b>Control feedback:</b> The result of the robot's action is newly observed and reflected in the next prediction.</li>
+</ul>
+
+<p>The second kind is present unchanged in the parallel prediction model of Part 2. The difference lies in the first. And sequential prediction does not mean the joints move one at a time. The robot executes the completed action vector after all 7 tokens have been produced.</p>
+
+<div class="oneline">OpenVLA's inference cost comes from a structure that runs the language model once per action dimension.</div>
+
+<h2 id="s6"><span class="n">6</span>Results: Performance and Fine-Tuning</h2>
+
+<p>The headline result is the comparison with RT-2-X (55B), the closed model that was the standard at the time. Across 29 tasks, the absolute success rate was 16.5 points higher.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Method</th><th class="num">BridgeData V2 WidowX</th><th class="num">Google robot</th></tr></thead>
+<tbody>
+<tr><td>RT-1-X (35M)</td><td class="num">18.5 ±2.7%</td><td class="num">33.3 ±6.1%</td></tr>
+<tr><td>Octo (93M)</td><td class="num">20.0 ±2.6%</td><td class="num">26.7 ±5.8%</td></tr>
+<tr><td>RT-2-X (55B)</td><td class="num">50.6 ±3.5%</td><td class="num">78.3 ±5.4%</td></tr>
+<tr class="mine"><td>OpenVLA (7B)</td><td class="num">70.6 ±3.2%</td><td class="num">85.0 ±4.6%</td></tr>
+</tbody></table></div>
+<p class="cap">Tables 4 and 6 of the paper. WidowX: 17 tasks, 170 trials. Google robot: 12 tasks, 60 trials. The paper assesses the Google robot results as being at a similar level to RT-2-X.</p>
+
+<p>Another contribution of this paper is its fine-tuning method. It shows that when learning a new task from a small number of demonstrations, LoRA can reach nearly the same performance without retraining the whole model.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Strategy</th><th class="num">Success rate</th><th class="num">Trained parameters</th></tr></thead>
+<tbody>
+<tr><td>Full fine-tuning</td><td class="num">69.7 ±7.2%</td><td class="num">7,188M</td></tr>
+<tr><td>Last layer only</td><td class="num">30.3 ±6.1%</td><td class="num">465M</td></tr>
+<tr><td>Frozen vision encoder</td><td class="num">47.0 ±6.9%</td><td class="num">6,760M</td></tr>
+<tr><td>Sandwich</td><td class="num">62.1 ±7.9%</td><td class="num">914M</td></tr>
+<tr class="mine"><td>LoRA (r=32)</td><td class="num">68.2 ±7.5%</td><td class="num">97.6M</td></tr>
+</tbody></table></div>
+<p class="cap">Table 1 of the paper. 2 Franka-Tabletop tasks, 33 trials per strategy. This table reports results for a variant that uses only SigLIP, not the main model.</p>
+
+<p>Training only 1.4% of all parameters gives nearly the same performance. The OFT recipe in Part 2 carries this LoRA over as is.</p>
+
+<h2 id="s7"><span class="n">7</span>Limitations and the Next Part</h2>
+
+<p>Putting together the limitations the paper itself names and those that follow from the architecture gives the following list.</p>
+
+<ul>
+<li><b>The input is a single image only.</b> It does not take a wrist camera, robot state (proprioception), or observation history.</li>
+<li><b>It is slow.</b> It runs at about 6Hz on a single RTX 4090. That falls far short of bimanual systems like ALOHA that run at 50Hz.</li>
+<li><b>Trajectory smoothness.</b> On precise tasks within a narrow range, Diffusion Policy produces smoother trajectories.</li>
+<li><b>Reliability.</b> Success rates on the evaluation tasks are generally below 90%.</li>
+</ul>
+
+<p>The paper mentions action chunking as a solution for fast control. OpenVLA-OFT in Part 2 goes exactly in that direction, keeping the same backbone and removing the token generation scheme.</p>
+
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li>Kim, Pertsch, Karamcheti et al. <a href="https://arxiv.org/abs/2406.09246">OpenVLA: An Open-Source Vision-Language-Action Model</a>. arXiv:2406.09246, 2024.</li>
+<li>Karamcheti et al. <a href="https://arxiv.org/abs/2402.07865">Prismatic VLMs</a>. arXiv:2402.07865, 2024.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-2-openvla-oft"><span>Next part</span>2. OpenVLA-OFT: Dropping tokens and predicting the action all at once</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>

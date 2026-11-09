@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en" data-part="pi0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>π0: Learning directions instead of actions</title>
+<meta name="description" content="Part 3 of the VLA Architecture Series. Notes on how π0 combines a VLM and an action expert through attention and generates action chunks with flow matching, along with its masking and caching.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="π0: Learning directions instead of actions">
+<meta property="og:description" content="Part 3 of the VLA Architecture Series. Notes on how π0 combines a VLM and an action expert through attention and generates action chunks with flow matching, along with its masking and caching.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-3-pi0">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-3-pi0-en.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="π0: Learning directions instead of actions (VLA Architecture Series)">
+<meta property="article:published_time" content="2026-11-08">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="π0">
+<meta property="article:tag" content="flow matching">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="π0: Learning directions instead of actions">
+<meta name="twitter:description" content="Part 3 of the VLA Architecture Series. Notes on how π0 combines a VLM and an action expert through attention and generates action chunks with flow matching, along with its masking and caching.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-3-pi0-en.png">
+<meta name="twitter:image:alt" content="π0: Learning directions instead of actions (VLA Architecture Series)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">Paper</span>
+  <a href="https://arxiv.org/abs/2410.24164">π0: A Vision-Language-Action Flow Model for General Robot Control</a>
+  <span class="id">arXiv:2410.24164</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>π0</h1>
+  <p class="sub">Learning directions instead of actions</p>
+  <p class="meta">VLA Architecture Series, Part 3 of 4, November 2026</p>
+  <ul class="series" aria-label="Series">
+    <li><a href="/posts/research/vla-1-openvla">1. OpenVLA</a></li>
+    <li><a href="/posts/research/vla-2-openvla-oft">2. OpenVLA-OFT</a></li>
+    <li><span class="now">3. π0</span></li>
+    <li><a href="/posts/research/vla-4-smolvla">4. SmolVLA</a></li>
+    <li class="lang"><a href="/posts/research/vla-3-pi0-ko" lang="ko">한국어</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">There is an obstacle in front of a cup. The robot can go around it on the left or on the right. If the demonstration data contains each path half the time, what should the model output?</p>
+
+<p>OFT in Part 2 computes actions directly from the current observation. π0 starts from random numbers and revises them several times to produce actions. This part looks at why it does that, and at how the action expert responsible for this process connects to the VLM.</p>
+
+<nav class="toc" aria-label="Table of contents">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#s1">Structure: VLM and Action Expert</a></li>
+    <li><a href="#s2">Flow Matching Is Also Regression</a></li>
+    <li><a href="#s3">Why Start from Noise at All</a></li>
+    <li><a href="#s4">Masking and Caching</a></li>
+    <li><a href="#s5">Data and Execution</a></li>
+    <li><a href="#s6">Results</a></li>
+    <li><a href="#s7">Limitations and the Next Part</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>Structure: VLM and Action Expert</h2>
+
+<p>π0 uses two transformers. A VLM of about 3B parameters, initialized from PaliGemma, processes images and language, and an action expert of about 300M parameters, trained from scratch, processes the robot state and action candidates. Together they come to 3.3B.</p>
+
+<figure>
+<div class="pipe">
+  <div class="row"><div class="b">Images</div><div class="b">Language</div></div>
+  <div class="a">↓</div>
+  <div class="b">PaliGemma VLM weights<small>about 3B, pretrained initialization</small></div>
+  <div class="a">↕ Tokens from the two sets of weights meet in self-attention</div>
+  <div class="b hot">Action expert weights<small>about 300M, trained from scratch</small></div>
+  <div class="a">↑</div>
+  <div class="row"><div class="b">Robot state</div><div class="b">Noisy actions + time τ</div></div>
+  <div class="a">↓ Linear projection of the action token outputs</div>
+  <div class="b out">Velocity \(v_\theta\)<small>\(H \times\) action dimension, here \(H=50\)</small></div>
+</div>
+<figcaption><b>Figure 1.</b> Each input is processed by its own weights, but the tokens from both sides interact through attention inside the transformer. This is not a design that takes a single VLM output and uses it as a condition.</figcaption>
+</figure>
+
+<p>Some terminology first. "Action head" is a general term for whatever part handles action output, while "action expert" refers to a separate neural network that, as in π0, processes action tokens with its own weights. The action expert is a trainable transformer, not a classical robot controller. If the VLM deals with "which cup to pick up," the action expert deals with "how to move in order to pick up that cup."</p>
+
+<p>The noisy actions pass through an MLP together with the time τ and become tokens. \(\phi\) is a sinusoidal encoding of τ.</p>
+
+$$\text{embed}(a^\tau,\tau)=W_3\cdot\text{swish}\!\left(W_2\cdot\text{concat}(W_1\cdot a^\tau,\ \phi(\tau))\right)$$
+
+<h2 id="s2"><span class="n">2</span>Flow Matching Is Also Regression</h2>
+
+<p>It is easy to think of flow matching as abandoning regression. But flow matching is also a regression problem of predicting numbers. What changes is the <b>target of the regression</b>.</p>
+
+<p>Say the correct action is 0.8 and the sampled noise is -0.2. OFT learns to predict 0.8 directly from the observation. π0 takes a point on the straight line connecting the noise and the correct action, and learns to predict which direction to move from that point and how far.</p>
+
+$$A^\tau=\tau A+(1-\tau)\epsilon,\qquad \epsilon\sim\mathcal N(0,I)$$
+$$u(A^\tau\mid A)=A-\epsilon$$
+$$\mathcal L(\theta)=\mathbb E\,\big\|v_\theta(A^\tau,o_t)-u(A^\tau\mid A)\big\|^2$$
+
+<p>In π0's notation, \(\tau=0\) is noise and \(\tau=1\) is data. In the example above, the correct direction is \(0.8-(-0.2)=1.0\). During training the correct action is available, so the direction can be computed, but at inference there is no correct action. So the model moves a small step from the current position in the direction it predicts, then predicts again from there.</p>
+
+$$A^{\tau+\delta}=A^\tau+\delta\, v_\theta(A^\tau,o_t),\qquad \delta=0.1$$
+
+<figure class="anim" data-anim="flow"></figure>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>τ</th><th class="num">0</th><th class="num">0.25</th><th class="num">0.5</th><th class="num">0.75</th><th class="num">1</th></tr></thead>
+<tbody><tr><td>Value (example: four steps at velocity 1.0)</td><td class="num">-0.20</td><td class="num">0.05</td><td class="num">0.30</td><td class="num">0.55</td><td class="num">0.80</td></tr></tbody>
+</table></div>
+<p class="cap">This is the simplest case, one-dimensional with a constant direction. The real velocity field varies with the current position, time, and observation. π0 integrates with 10 steps of forward Euler.</p>
+
+<p>The derivation and figures are written up separately in the <a href="/posts/research/flow-matching">flow matching post</a> on this blog. Here, only the conclusion needs to be remembered.</p>
+
+<div class="oneline">OFT regresses the final action values, and π0 regresses the velocity field that changes the actions.</div>
+
+<p>The distribution used to sample the time τ also involves a choice. Instead of a uniform distribution, π0 uses \(p(\tau)=\text{Beta}(\frac{s-\tau}{s};1.5,1)\), \(s=0.999\). The paper's reasoning is this: the small-τ region, where the model has to predict the mean action from the observation alone, is the hardest problem, so that region is sampled more often. Values of τ greater than s are not sampled.</p>
+
+<h2 id="s3"><span class="n">3</span>Why Start from Noise at All</h2>
+
+<p>Back to the opening question. Direct regression with mean squared error risks averaging the left and right paths, and that average could be right in the middle of the obstacle. (As seen in Part 2, OFT's L1 leans toward the median, but the problem of split modes remains.)</p>
+
+<figure class="anim" data-anim="modes"></figure>
+
+<p>Flow matching models a conditional <b>distribution</b>. With a different starting noise, the result can take the left path or the right path. Revising several times is not magic in itself. The key is that a distribution is learned, and the repeated integration is the computational procedure for drawing samples from that distribution.</p>
+
+<p>In terms of ordering, it also differs from OpenVLA. OpenVLA generates tokens one after another, while π0 lays out the entire future action sequence at once as position-wise tokens and refines the whole thing several times.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>OFT (L1 regression)</th><th>π0 (flow matching)</th></tr></thead>
+<tbody>
+<tr><td>Target</td><td>The action values themselves</td><td>The direction from noise to action</td></tr>
+<tr><td>Inference</td><td>1 forward pass</td><td>1 VLM pass + 10 action expert passes</td></tr>
+<tr><td>Nature of the output</td><td>Deterministic</td><td>Varies with the initial noise</td></tr>
+<tr><td>Strength</td><td>Fast and simple</td><td>Can represent multiple action patterns</td></tr>
+</tbody></table></div>
+
+<p>That raises a question. How many situations in picking up a cup really call for multiple action paths? If the optimal action is mostly determined as a single one, the repeated computation may be wasteful. There are cases, like the LIBERO results in Part 2, where L1 and diffusion came out similar, so this is still an open question.</p>
+
+<h2 id="s4"><span class="n">4</span>Masking and Caching</h2>
+
+<p>An attention mask is the rule that determines which tokens can see the information of which other tokens. π0 divides the tokens into three blocks. Within a block, tokens can see each other. Later blocks can see earlier ones, but earlier blocks cannot see later ones.</p>
+
+<figure class="anim" data-anim="pimask"></figure>
+
+<p>Asking why this mask exists brings out the difference from OpenVLA. The causal mask in Part 1 prevents the model from seeing target tokens ahead of time, because future actions are used as <b>targets</b> for training but must not be shown as <b>inputs</b> for making a prediction. π0 is different. Action tokens can all see each other. The main role of the mask here is to keep the image and language tokens from seeing the noisy actions, which keep changing.</p>
+
+<p>This is what makes caching possible. The results of the earlier blocks stay the same as τ changes, so if the keys and values are stored, they do not need to be recomputed during the 10 integration steps. The robot state has its own block for the same reason, so that its KV can be cached.</p>
+
+<figure class="anim" data-anim="cache"></figure>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Stage (RTX 4090, 3 cameras)</th><th class="num">Time</th></tr></thead>
+<tbody>
+<tr><td>Image encoder</td><td class="num">14 ms</td></tr>
+<tr><td>Observation forward pass</td><td class="num">32 ms</td></tr>
+<tr class="mine"><td>10 action forward passes (flow integration)</td><td class="num">27 ms</td></tr>
+<tr><td>Total (onboard)</td><td class="num">73 ms</td></tr>
+</tbody></table></div>
+<p class="cap">Table I of the paper. With remote inference, 13 ms of network latency is added, for a total of 86 ms.</p>
+
+<p>Running the action expert 10 times takes only 27ms. The VLM runs only once, the action expert is small, and there is a cache on top of that. This is why "computing several times" in flow matching does not directly mean "10 times slower."</p>
+
+<h2 id="s5"><span class="n">5</span>Data and Execution</h2>
+
+<p>Another distinguishing feature of π0 is large-scale multi-robot pretraining.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Item</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>In-house data</td><td>903 million timesteps (106 million single-arm, 797 million dual-arm)</td></tr>
+<tr><td>Composition</td><td>7 robot configurations, 68 tasks, over 10,000 hours in total</td></tr>
+<tr><td>Share of public data</td><td>9.1% of the mixture (OXE, Bridge v2, DROID)</td></tr>
+<tr><td>Per-robot weighting</td><td>\(n^{0.43}\) for a task-robot combination with \(n\) samples</td></tr>
+<tr><td>Dimension matching</td><td>States and actions zero-padded to the largest dimension, 18</td></tr>
+<tr><td>Training length</td><td>700,000 steps</td></tr>
+</tbody></table></div>
+
+<p>Robots with different action dimensions are padded to 18 dimensions and trained in a single model. For robots with fewer than 3 cameras, the missing slots are masked.</p>
+
+<p>On the execution side, \(H=50\) actions are predicted, but not all of them are used. A 20Hz robot executes 16 (0.8 seconds) and a 50Hz robot executes 25 (0.5 seconds) open-loop, then runs inference again. Temporal ensembling, which overlaps and averages predicted chunks, actually lowered performance in the paper.</p>
+
+<h2 id="s6"><span class="n">6</span>Results</h2>
+
+<p>The main evaluation numbers in the π0 paper are presented in figures rather than tables, so only the paper's conclusions are relayed here.</p>
+
+<ul>
+<li><b>Evaluation without separate fine-tuning:</b> π0 beat OpenVLA and Octo on shirt folding, table clearing, packing grocery items, and the toaster task, and a version trained for the same number of steps (160,000) also did better than the comparison models.</li>
+<li><b>Language conditioning:</b> π0 improved meaningfully over π0-small, a model of about 470M that does not use VLM pretraining.</li>
+<li><b>Fine-tuning on new tasks:</b> π0 was generally ahead of ACT, Diffusion Policy, OpenVLA, and Octo.</li>
+<li><b>Long tasks:</b> On composite tasks taking 5 to 20 minutes, every task exceeded 50% of the maximum score.</li>
+</ul>
+
+<p>Numeric comparisons are in the table in Part 2. In the OFT paper, π0 averaged 94.2% on LIBERO and scored 93.33% on the ALOHA Scoop X task. It should also be kept in mind that these comparisons are not made under fully identical conditions.</p>
+
+<h2 id="s7"><span class="n">7</span>Limitations and the Next Part</h2>
+
+<ul>
+<li><b>Understanding of data composition.</b> The paper states that how the pretraining data should be composed is still not well understood.</li>
+<li><b>Reliability.</b> Not all of the evaluated tasks work reliably.</li>
+<li><b>Model size.</b> A 3.3B model and data at this scale are hard to reproduce as is in a small-scale setting.</li>
+</ul>
+
+<p>Could a model keep flow matching and be made much smaller? SmolVLA in Part 4 is that attempt. It redesigns the VLM, the action expert, and the way the two are connected, all together.</p>
+
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li>Black et al. <a href="https://arxiv.org/abs/2410.24164">π0: A Vision-Language-Action Flow Model for General Robot Control</a>. arXiv:2410.24164, 2024.</li>
+<li>Lipman et al. <a href="https://arxiv.org/abs/2210.02747">Flow Matching for Generative Modeling</a>. arXiv:2210.02747, 2022.</li>
+<li>Beyer et al. <a href="https://arxiv.org/abs/2407.07726">PaliGemma: A versatile 3B VLM</a>. arXiv:2407.07726, 2024.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-4-smolvla"><span>Next part</span>4. SmolVLA: The same principle on a small budget</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>

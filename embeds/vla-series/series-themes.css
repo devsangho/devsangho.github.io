@@ -1,0 +1,89 @@
+/* The series shares one design and each post gets its own palette, chosen by
+   <html data-part="...">. Loaded after series.css. The animations draw with
+   the same tokens, so they follow the palette. */
+
+/* ---------- Palettes ---------- */
+:root[data-part="openvla"]{
+  --paper:#FFF7F2; --card:#FFFFFF; --ink:#2B1A16; --ink-2:#7A5F56; --rule:#F0DDD3;
+  --blue:#C93A20; --green:#9A5F00; --orange:#7A3FC4; --hl:#E08A2E; --hl-soft:rgba(224,138,46,.14);
+  --blue-soft:rgba(201,58,32,.10); --green-soft:rgba(154,95,0,.12); --h1:clamp(64px,14vw,160px);
+}
+@media (prefers-color-scheme:dark){:root[data-part="openvla"]:not([data-theme="light"]){
+  --paper:#170D0A; --card:#241512; --ink:#FBEDE6; --ink-2:#C4A79C; --rule:#43291F;
+  --blue:#FF8A6E; --green:#F5BF5A; --orange:#C6A0FF; --hl:#FF8A6E; --hl-soft:rgba(255,138,110,.12);
+  --blue-soft:rgba(255,138,110,.13); --green-soft:rgba(245,191,90,.12); color-scheme:dark;}}
+:root[data-part="openvla"][data-theme="dark"]{
+  --paper:#170D0A; --card:#241512; --ink:#FBEDE6; --ink-2:#C4A79C; --rule:#43291F;
+  --blue:#FF8A6E; --green:#F5BF5A; --orange:#C6A0FF; --hl:#FF8A6E; --hl-soft:rgba(255,138,110,.12);
+  --blue-soft:rgba(255,138,110,.13); --green-soft:rgba(245,191,90,.12); color-scheme:dark;}
+
+:root[data-part="oft"]{
+  --paper:#F2F8FE; --card:#FFFFFF; --ink:#0E2A47; --ink-2:#47627F; --rule:#D2E2F1;
+  --blue:#0A5FD6; --green:#00806A; --orange:#D9480F; --hl:#2F8CF0; --hl-soft:rgba(47,140,240,.13);
+  --blue-soft:rgba(10,95,214,.10); --green-soft:rgba(0,128,106,.12); --h1:clamp(46px,10.5vw,124px);
+}
+@media (prefers-color-scheme:dark){:root[data-part="oft"]:not([data-theme="light"]){
+  --paper:#07152A; --card:#0E2140; --ink:#E4F0FF; --ink-2:#9DB8D6; --rule:#24426B;
+  --blue:#62B8FF; --green:#4FE0BE; --orange:#FFA463; --hl:#62B8FF; --hl-soft:rgba(98,184,255,.12);
+  --blue-soft:rgba(98,184,255,.14); --green-soft:rgba(79,224,190,.13); color-scheme:dark;}}
+:root[data-part="oft"][data-theme="dark"]{
+  --paper:#07152A; --card:#0E2140; --ink:#E4F0FF; --ink-2:#9DB8D6; --rule:#24426B;
+  --blue:#62B8FF; --green:#4FE0BE; --orange:#FFA463; --hl:#62B8FF; --hl-soft:rgba(98,184,255,.12);
+  --blue-soft:rgba(98,184,255,.14); --green-soft:rgba(79,224,190,.13); color-scheme:dark;}
+
+:root[data-part="pi0"]{
+  --paper:#F7F5FF; --card:#FFFFFF; --ink:#1E1A38; --ink-2:#5F5A80; --rule:#DDD8F0;
+  --blue:#6246EA; --green:#0E9F8E; --orange:#D93B6A; --hl:#8B7BF0; --hl-soft:rgba(139,123,240,.13);
+  --blue-soft:rgba(98,70,234,.10); --green-soft:rgba(14,159,142,.12); --h1:clamp(88px,19vw,190px);
+}
+@media (prefers-color-scheme:dark){:root[data-part="pi0"]:not([data-theme="light"]){
+  --paper:#0E0B1F; --card:#17132E; --ink:#EDEAFB; --ink-2:#A8A2CC; --rule:#2F2952;
+  --blue:#A594FF; --green:#45DCC6; --orange:#FF89A8; --hl:#A594FF; --hl-soft:rgba(165,148,255,.12);
+  --blue-soft:rgba(165,148,255,.13); --green-soft:rgba(69,220,198,.12); color-scheme:dark;}}
+:root[data-part="pi0"][data-theme="dark"]{
+  --paper:#0E0B1F; --card:#17132E; --ink:#EDEAFB; --ink-2:#A8A2CC; --rule:#2F2952;
+  --blue:#A594FF; --green:#45DCC6; --orange:#FF89A8; --hl:#A594FF; --hl-soft:rgba(165,148,255,.12);
+  --blue-soft:rgba(165,148,255,.13); --green-soft:rgba(69,220,198,.12); color-scheme:dark;}
+
+:root[data-part="smol"]{
+  --paper:#F5FBEE; --card:#FFFFFF; --ink:#16291C; --ink-2:#56705D; --rule:#D8E8CF;
+  --blue:#0B7A4B; --green:#5F7D00; --orange:#C2410C; --hl:#4FA34A; --hl-soft:rgba(79,163,74,.14);
+  --blue-soft:rgba(11,122,75,.11); --green-soft:rgba(95,125,0,.13); --h1:clamp(64px,14vw,160px);
+}
+@media (prefers-color-scheme:dark){:root[data-part="smol"]:not([data-theme="light"]){
+  --paper:#0A150D; --card:#122016; --ink:#EAF7E9; --ink-2:#A5C2A8; --rule:#2A4430;
+  --blue:#5EDB94; --green:#D4E157; --orange:#FFA07A; --hl:#5EDB94; --hl-soft:rgba(94,219,148,.12);
+  --blue-soft:rgba(94,219,148,.13); --green-soft:rgba(212,225,87,.12); color-scheme:dark;}}
+:root[data-part="smol"][data-theme="dark"]{
+  --paper:#0A150D; --card:#122016; --ink:#EAF7E9; --ink-2:#A5C2A8; --rule:#2A4430;
+  --blue:#5EDB94; --green:#D4E157; --orange:#FFA07A; --hl:#5EDB94; --hl-soft:rgba(94,219,148,.12);
+  --blue-soft:rgba(94,219,148,.13); --green-soft:rgba(212,225,87,.12); color-scheme:dark;}
+
+/* ---------- The shared design ---------- */
+:root[data-part]{--grid:transparent; --anim-rx:14}
+[data-part] .paper{position:absolute;left:0;right:0;top:0;z-index:2;background:none;border:0}
+[data-part] .paper-inner{max-width:1040px}
+[data-part] .hero{position:relative;border:0;min-height:min(86vh,720px);display:flex;align-items:center;overflow:hidden}
+[data-part] .hero canvas{position:absolute;inset:0;width:100%;height:100%}
+[data-part] .hero-inner{position:relative;max-width:1040px;width:100%;padding:96px 22px 56px}
+[data-part] .hero h1{width:fit-content;max-width:100%;font-weight:200;font-size:var(--h1);letter-spacing:-.05em;margin:0 0 6px;padding-right:.06em;background:linear-gradient(100deg,var(--blue),var(--green));-webkit-background-clip:text;background-clip:text;color:transparent}
+[data-part] .hero .sub{font-size:24px;font-weight:300;color:var(--ink);max-width:18em}
+[data-part] .series{gap:6px}
+[data-part] .series a,[data-part] .series span{border-radius:99px;padding:8px 16px;background:var(--card);border-color:transparent;box-shadow:0 2px 14px var(--blue-soft)}
+[data-part] .series .now{background:linear-gradient(100deg,var(--blue),var(--green));color:var(--paper)}
+[data-part] h2{font-weight:600;font-size:30px;display:flex;align-items:center;gap:14px}
+[data-part] h2 .n{flex:none;width:44px;height:44px;margin:0;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,var(--blue),var(--green));color:var(--paper);font-size:18px}
+[data-part] .toc,[data-part] figure,[data-part] details.deep,[data-part] .next{border:0;border-radius:24px;box-shadow:0 8px 34px var(--blue-soft)}
+[data-part] .note,[data-part] .fix{border:0;border-radius:18px;background:var(--hl-soft)}
+[data-part] .oneline{border:0;text-align:center;font-size:22px;font-weight:300;padding:26px 8px}
+[data-part] .pipe .b{border-radius:16px}
+[data-part] table{border-collapse:separate;border-spacing:0 5px}
+[data-part] th{border-bottom:0;color:var(--ink-2);font-weight:500}
+[data-part] td{border:0;background:var(--card)}
+[data-part] td:first-child{border-radius:12px 0 0 12px}
+[data-part] td:last-child{border-radius:0 12px 12px 0}
+[data-part] tr.mine td{background:var(--blue-soft)}
+[data-part] table.mask td{background:none;border-radius:8px}
+[data-part] table.mask td.y{background:var(--blue-soft)}
+[data-part] .anim button{border-radius:99px}
+@media (max-width:560px){[data-part] .hero .sub{font-size:20px}[data-part] h2{font-size:24px}}

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko" data-part="smol">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SmolVLA: 같은 원리를 작은 예산으로</title>
+<meta name="description" content="VLA 아키텍처 4부작 4편. SmolVLA가 π0의 flow matching을 유지하면서 VLM, action expert, 실행 시스템을 작게 재설계한 방법을 정리하고 네 모델을 비교했다.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="SmolVLA: 같은 원리를 작은 예산으로">
+<meta property="og:description" content="VLA 아키텍처 4부작 4편. SmolVLA가 π0의 flow matching을 유지하면서 VLM, action expert, 실행 시스템을 작게 재설계한 방법을 정리하고 네 모델을 비교했다.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-4-smolvla-ko">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-4-smolvla-ko.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="SmolVLA: 같은 원리를 작은 예산으로 (VLA 아키텍처 4부작)">
+<meta property="article:published_time" content="2026-11-09">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="SmolVLA">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="SmolVLA: 같은 원리를 작은 예산으로">
+<meta name="twitter:description" content="VLA 아키텍처 4부작 4편. SmolVLA가 π0의 flow matching을 유지하면서 VLM, action expert, 실행 시스템을 작게 재설계한 방법을 정리하고 네 모델을 비교했다.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-4-smolvla-ko.png">
+<meta name="twitter:image:alt" content="SmolVLA: 같은 원리를 작은 예산으로 (VLA 아키텍처 4부작)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">논문</span>
+  <a href="https://arxiv.org/abs/2506.01844">SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics</a>
+  <span class="id">arXiv:2506.01844</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>SmolVLA</h1>
+  <p class="sub">같은 원리를 작은 예산으로</p>
+  <p class="meta">VLA 아키텍처 4부작 4편, 2026년 11월</p>
+  <ul class="series" aria-label="시리즈">
+    <li><a href="/posts/research/vla-1-openvla-ko">1. OpenVLA</a></li>
+    <li><a href="/posts/research/vla-2-openvla-oft-ko">2. OpenVLA-OFT</a></li>
+    <li><a href="/posts/research/vla-3-pi0-ko">3. π0</a></li>
+    <li><span class="now">4. SmolVLA</span></li>
+    <li class="lang"><a href="/posts/research/vla-4-smolvla" lang="en">English</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">π0를 이해했다면 SmolVLA는 훨씬 쉽다. VLM과 action expert를 쓰고 flow matching으로 action chunk를 만드는 원리가 같기 때문이다. 다른 것은 제약 조건이다. 전체 4억 5천만 파라미터로, 소비자용 GPU 한 장에서 돌아가야 한다.</p>
+
+<p>그렇다고 π0의 VLM만 작은 것으로 갈아 끼운 모델은 아니다. VLM, action expert, 그리고 둘의 연결 방식이 모두 다르고, 학습 이후의 실행 시스템도 별도로 설계했다.</p>
+
+<nav class="toc" aria-label="목차">
+  <b>목차</b>
+  <ol>
+    <li><a href="#s1">구조</a></li>
+    <li><a href="#s2">어떻게 작아졌나</a></li>
+    <li><a href="#s3">연결 방식: cross-attention</a></li>
+    <li><a href="#s4">비동기 추론</a></li>
+    <li><a href="#s5">커뮤니티 데이터</a></li>
+    <li><a href="#s6">결과와 한계</a></li>
+    <li><a href="#s7">네 모델을 한 표로</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>구조</h2>
+
+<figure>
+<div class="pipe">
+  <div class="row"><div class="b">이미지<small>512×512, 프레임당 64토큰</small></div><div class="b">언어</div><div class="b">로봇 상태<small>토큰 1개</small></div></div>
+  <div class="a">↓</div>
+  <div class="b">SmolVLM-2<small>SigLIP + SmolLM2, <b>고정(학습 안 함)</b>, 앞쪽 16개 층만 사용</small></div>
+  <div class="a">↓ 선형층으로 expert 차원에 투영</div>
+  <div class="b hot">Flow transformer (action expert)<small>약 1억 파라미터, cross-attention과 causal self-attention을 번갈아</small></div>
+  <div class="a">↓ 10스텝 적분</div>
+  <div class="b out">Action chunk<small>\(n=50\)</small></div>
+</div>
+<figcaption><b>그림 1.</b> SmolVLA의 구조. VLM 특징은 action expert의 Key와 Value로 들어간다.</figcaption>
+</figure>
+
+<p>중요한 설계 결정이 하나 있다. VLM은 고정하고 <b>action expert만 학습</b>한다. π0가 VLM까지 함께 학습하는 것과 다르고, 1편의 OpenVLA 실험에서 시각 인코더를 고정하면 성능이 크게 떨어졌던 것과 비교해 볼 만한 선택이다. 전체 약 4.5억 파라미터 중 실제 학습 대상은 약 1억 개다.</p>
+
+<p>flow matching의 원리는 3편과 같다. 시간 τ는 π0를 따라 Beta 분포에서 뽑고, 추론은 10스텝으로 고정한다. 손실의 ablation을 보면 LIBERO 평균이 flow matching 80.25, L1 회귀 75.25로 이 설정에서는 flow matching이 나았다.</p>
+
+<div class="note"><p><b class="tag">메모</b>논문은 \(A^\tau=\tau A+(1-\tau)\epsilon\)과 목표 \(u=\epsilon-A\)를 함께 적는다. 이 식대로 미분하면 \(dA^\tau/d\tau=A-\epsilon\)이어서 목표와 부호가 반대다. 논문만으로는 어느 쪽 관례를 썼는지 정해지지 않으니, 구현을 쓸 일이 있다면 코드에서 시간 방향을 확인하는 게 좋다.</p></div>
+
+<h2 id="s2"><span class="n">2</span>어떻게 작아졌나</h2>
+
+<p>파라미터 수와 연산량은 다른 이야기다. 파라미터를 줄이면 가중치 메모리가 줄고, 토큰을 줄이면 attention 연산량이 줄어든다. SmolVLA는 양쪽 모두를 건드린다.</p>
+
+<figure class="anim" data-anim="shrink"></figure>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>줄인 곳</th><th>방법</th></tr></thead>
+<tbody>
+<tr><td>VLM 크기</td><td>약 3B인 PaliGemma 대신 SmolVLM-2</td></tr>
+<tr><td>시각 토큰</td><td>타일링을 쓰지 않고 전체 이미지 하나 + pixel shuffle, 프레임당 64토큰</td></tr>
+<tr><td>VLM 층</td><td>절반인 앞쪽 16개 층만 사용 (\(N=L/2\))</td></tr>
+<tr><td>Expert 폭</td><td>VLM hidden 크기 \(d\)의 0.75배</td></tr>
+</tbody></table></div>
+
+<p>hidden 차원이 절반이 되면 attention의 가중치 행렬 크기는 대체로 제곱에 비례해 약 1/4이 된다. 전체 모델이 그만큼 줄어든다는 뜻은 아니지만, 폭을 줄이는 것이 왜 효과적인지는 설명해 준다.</p>
+
+<h3>VLM과 action expert, 어디에 예산을 쓸까</h3>
+
+<p>둘을 줄이면 잃는 것이 다르다. VLM이 작아지면 "파란 컵 뒤에 있는 빨간 컵을 집어" 같은 관계를 놓쳐 <b>무엇을 할지</b> 이해하는 능력이 떨어질 수 있다. action expert가 작아지면 컵의 위치는 알아도 손목 자세와 그리퍼 타이밍 같은 <b>어떻게 움직일지</b>를 표현하는 능력이 떨어질 수 있다.</p>
+
+<p>논문의 LIBERO ablation은 이 질문에 대한 단서를 조금 준다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>변수</th><th class="num">값</th><th class="num">LIBERO 평균 (%)</th></tr></thead>
+<tbody>
+<tr><td>VLM 층 수 N</td><td class="num">8 / 16 / 24 / 32</td><td class="num">75.0 / 78.5 / 79.5 / 80.3</td></tr>
+<tr><td>Expert 폭 (×d)</td><td class="num">1.00 / 0.75 / 0.50 / 0.25</td><td class="num">82.3 / 77.5 / 80.3 / 73.8</td></tr>
+<tr><td>Chunk 크기 n</td><td class="num">1 / 10 / 30 / 50 / 100</td><td class="num">50.0 / 84.0 / 78.5 / 80.3 / 74.5</td></tr>
+</tbody></table></div>
+<p class="cap">논문 표 8, 9, 12. VLM을 고정하고 처음부터 학습한 ablation이다.</p>
+
+<p>이 설정에서 N은 8에서 32로 올려도 약 5포인트만 차이 난다. 폭 값은 단조롭지 않은데, 기본값 0.75는 1.00과 0.50보다도 낮다. 또 기본 chunk 크기 50보다 10이 더 높다. 표본이 작은 시뮬레이션 결과이고 어느 한쪽의 일반 결론으로 보기는 어렵지만, "큰 VLM이 정말 필요한가"는 여전히 실험으로 답해야 하는 질문이다. 같은 전체 파라미터 예산을 VLM과 expert에 다르게 배분해 비교하면 좋을 것이다.</p>
+
+<h2 id="s3"><span class="n">3</span>연결 방식: cross-attention</h2>
+
+<p>3편의 π0에서는 VLM과 action expert의 토큰이 한 트랜스포머의 self-attention에서 만났다. SmolVLA는 다르다. action expert가 Query를 만들고, VLM의 특징을 Key와 Value로 쓰는 cross-attention으로 연결한다. VLM이 어디까지나 조건을 제공하는 쪽이 되므로 재사용과 계산 최적화에 유리하다.</p>
+
+<p>action expert 안에서는 블록마다 cross-attention(CA)과 self-attention(SA) 중 하나를 쓴다. SA는 causal mask를 써서 각 행동 토큰이 chunk 안의 앞쪽 토큰만 본다. π0의 양방향 attention과 구별되는 점이다. 논문은 이 SA가 chunk를 더 매끄럽게 만든다고 설명한다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Attention 구성</th><th class="num">LIBERO 평균 (%)</th></tr></thead>
+<tbody>
+<tr><td>CA만</td><td class="num">79.0</td></tr>
+<tr><td>SA만</td><td class="num">74.5</td></tr>
+<tr class="mine"><td>CA + SA 교대</td><td class="num">85.5</td></tr>
+</tbody></table></div>
+<p class="cap">표 6. 별도 비교에서 causal SA는 74.5, 양방향 SA는 67.5였다(표 7).</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>구분</th><th>π0</th><th>SmolVLA</th></tr></thead>
+<tbody>
+<tr><td>VLM</td><td>PaliGemma, 함께 학습</td><td>SmolVLM-2, 고정</td></tr>
+<tr><td>Action expert</td><td>약 300M 트랜스포머</td><td>약 100M 트랜스포머</td></tr>
+<tr><td>결합</td><td>결합된 self-attention</td><td>cross-attention</td></tr>
+<tr><td>행동 토큰끼리</td><td>양방향</td><td>causal</td></tr>
+<tr><td>행동 생성</td><td>flow matching, 10스텝</td><td>flow matching, 10스텝</td></tr>
+<tr><td>실행</td><td>주기적 재추론</td><td>동기 또는 비동기</td></tr>
+</tbody></table></div>
+
+<h2 id="s4"><span class="n">4</span>비동기 추론</h2>
+
+<p>chunk를 전부 실행하고 나서 다음 chunk를 계산하면, 추론이 끝날 때까지 로봇이 멈춘다. SmolVLA는 실행과 추론을 분리한다. RobotClient는 큐에서 행동을 꺼내 실행하고, 원격에 있을 수 있는 PolicyServer가 새 chunk를 계산한다.</p>
+
+<figure class="anim" data-anim="async"></figure>
+
+<p>큐에 남은 비율이 임계값 \(g\)보다 낮아지면 새 관측을 보낸다.</p>
+
+$$\frac{|\mathcal A_t|}{n}<g$$
+
+<p>큐가 바닥나기 전에 새 chunk가 도착하려면 다음이 필요하다. \(\Delta t\)는 제어 주기로, 30fps면 33ms다.</p>
+
+$$g\ge\frac{\mathbb E[\ell_S]/\Delta t}{n}$$
+
+<p>\(g=0\)이면 완전히 순차적이고, \(g=0.7\)은 논문의 비동기 예시이며, \(g=1\)이면 매 시점 관측을 보낸다. 비슷한 관측은 관절 공간 거리로 걸러 버리고, 새 chunk는 기존 chunk의 겹치는 구간과 합친다.</p>
+
+<p>비동기 실행은 학습 알고리즘이 아니라 학습된 정책을 실행하는 시스템 설계다. 그리고 공짜가 아니다. 다음 chunk를 계산하는 동안 로봇이 움직이므로 추론에 쓴 관측이 오래된 것이 되고, chunk끼리 충돌할 수도 있다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>지표</th><th class="num">동기</th><th class="num">비동기</th></tr></thead>
+<tbody>
+<tr><td>10회 총 소요 시간</td><td class="num">137.5 s</td><td class="num">97.0 s</td></tr>
+<tr><td>60초 내 집어 옮긴 큐브 수</td><td class="num">9</td><td class="num">19</td></tr>
+<tr><td>평균 성공률</td><td class="num">78.3%</td><td class="num">73.3%</td></tr>
+<tr><td>Sorting 성공률</td><td class="num">70%</td><td class="num">50%</td></tr>
+</tbody></table></div>
+<p class="cap">논문 그림 5. 속도는 분명히 빨라졌지만, 성공률은 Sorting에서 떨어졌다. 논문의 주요 실제 결과(78.3)는 동기 실행으로 측정했다.</p>
+
+<h2 id="s5"><span class="n">5</span>커뮤니티 데이터</h2>
+
+<p>SmolVLA의 사전학습은 Hugging Face에 공개된 SO-100 데이터에 기반한다. 481개 데이터셋, 22.9K 에피소드, 1,060만 프레임이다. 실험실 데이터와 달리 라벨이 지저분해서 전처리가 필요했다.</p>
+
+<ul>
+<li><b>작업 설명:</b> "Hold", "Up", "task desc"처럼 쓸모없는 라벨을 Qwen2.5-VL-3B-Instruct로 샘플 프레임을 보여 주며 다시 작성했다.</li>
+<li><b>카메라 이름:</b> 데이터셋마다 다른 이름을 top, wrist, side에 수작업으로 대응시켜 표준화했다.</li>
+</ul>
+
+<p>효과는 컸다. SO-100 평균 성공률은 단일 작업 비사전학습 40%에서, 다중 작업 비사전학습 51.7%, 커뮤니티 사전학습 포함 78.3%로 올랐다. 사전학습은 AdamW와 코사인 학습률로 20만 스텝을 돌렸고, 큰 배치를 위해 GPU 4장을 썼다.</p>
+
+<h2 id="s6"><span class="n">6</span>결과와 한계</h2>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>방법</th><th class="num">파라미터</th><th class="num">LIBERO</th><th class="num">Meta-World</th></tr></thead>
+<tbody>
+<tr class="mine"><td>SmolVLA</td><td class="num">0.45B</td><td class="num">87.3</td><td class="num">57.3</td></tr>
+<tr><td>π0</td><td class="num">3.3–3.5B</td><td class="num">86.0</td><td class="num">47.9</td></tr>
+<tr><td>OpenVLA</td><td class="num">7B</td><td class="num">76.5</td><td class="num">–</td></tr>
+<tr><td>Octo</td><td class="num">0.09B</td><td class="num">75.1</td><td class="num">–</td></tr>
+<tr><td>Diffusion Policy</td><td class="num">–</td><td class="num">72.4</td><td class="num">10.5</td></tr>
+</tbody></table></div>
+<p class="cap">표 2, 평균 성공률(%). 비교 수치 일부는 다른 논문에서 가져온 값이므로 수치 하나로 우열을 단정하기는 어렵다. 논문은 π0 대비 학습이 약 40% 빠르고 메모리는 6배 적게 쓴다고 보고한다.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>실제 로봇 (SO-100, %)</th><th class="num">Pick-Place</th><th class="num">Stacking</th><th class="num">Sorting</th><th class="num">평균</th></tr></thead>
+<tbody>
+<tr class="mine"><td>SmolVLA 0.45B (다중 작업)</td><td class="num">75</td><td class="num">90</td><td class="num">70</td><td class="num">78.3</td></tr>
+<tr><td>π0 3.5B (다중 작업)</td><td class="num">100</td><td class="num">40</td><td class="num">45</td><td class="num">61.7</td></tr>
+<tr><td>ACT (단일 작업)</td><td class="num">70</td><td class="num">50</td><td class="num">25</td><td class="num">48.3</td></tr>
+</tbody></table></div>
+<p class="cap">표 3. 부분 점수를 포함한 값이다. π0는 Pick-Place에서 100으로 가장 높아, 작업별로 양상이 다르다.</p>
+
+<p>작은 모델이 항상 큰 모델보다 낫다는 뜻은 아니다. 논문이 밝힌 한계는 이렇다.</p>
+
+<ul>
+<li>사전학습이 SO-100 데이터에 한정되어 있어 다른 로봇으로의 일반화는 검증되지 않았다.</li>
+<li>궤적이 약 2.3만 개로 OpenVLA의 약 100만 개보다 훨씬 적다.</li>
+<li>사용한 VLM이 주로 문서와 OCR 위주로 사전학습되었다.</li>
+<li>장기 계획이 필요한 작업은 아직 약하다.</li>
+</ul>
+
+<h2 id="s7"><span class="n">7</span>네 모델을 한 표로</h2>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>OpenVLA</th><th>OpenVLA-OFT</th><th>π0</th><th>SmolVLA</th></tr></thead>
+<tbody>
+<tr><td>규모</td><td>7B</td><td>7B + 헤드</td><td>3.3B</td><td>0.45B</td></tr>
+<tr><td>행동 표현</td><td>이산 토큰 (256 구간)</td><td>연속</td><td>연속</td><td>연속</td></tr>
+<tr><td>생성</td><td>자기회귀</td><td>병렬 1회</td><td>flow 10스텝</td><td>flow 10스텝</td></tr>
+<tr><td>손실</td><td>cross-entropy</td><td>L1</td><td>속도 MSE</td><td>속도 MSE</td></tr>
+<tr><td>VLM 연결</td><td>VLM이 직접 출력</td><td>행동 위치 임베딩 + MLP</td><td>결합 self-attention</td><td>cross-attention</td></tr>
+<tr><td>로봇 상태 입력</td><td>없음</td><td>있음</td><td>있음</td><td>있음</td></tr>
+<tr><td>Chunk</td><td>없음 (한 시점)</td><td>8 / 25</td><td>50</td><td>50</td></tr>
+</tbody></table></div>
+
+<p>네 편의 용어는 세 범주로 묶을 수 있다.</p>
+
+<ul>
+<li><b>정보를 이해하는 기술:</b> VLM, 트랜스포머, attention, attention mask.</li>
+<li><b>행동을 만들고 학습하는 기술:</b> action expert, 회귀, flow matching, action chunk, 손실.</li>
+<li><b>빠르게 실행하는 기술:</b> 캐싱, 비동기 추론, 재계획.</li>
+</ul>
+
+<p>새로운 VLA 논문을 읽을 때는 그 논문이 이 중 어디를 바꿨는지부터 찾으면 된다. 네 편을 정리하고 나서 남는 질문은 세 가지다.</p>
+
+<ol>
+<li>VLM의 정보를 action expert에 전달하는 방식, 즉 결합 강도는 성능과 비용에 얼마나 영향을 주는가?</li>
+<li>다중모드 행동이 얼마나 자주 필요한가? 즉 직접 회귀와 flow matching의 경계는 어디인가?</li>
+<li>같은 파라미터 예산을 시각·언어 이해와 행동 생성에 어떻게 나눠야 하는가?</li>
+</ol>
+
+<p>모두 모델의 지능을 비교하는 문제가 아니라, 같은 정보를 주었을 때 신경망을 어떻게 연결하고 어디에 계산을 쓸 것인가의 문제다.</p>
+
+<h2 id="refs">참고문헌</h2>
+<ol class="refs">
+<li>Shukor, Aubakirova, Capuano et al. <a href="https://arxiv.org/abs/2506.01844">SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics</a>. arXiv:2506.01844, 2025.</li>
+<li>Marafioti et al. <a href="https://arxiv.org/abs/2504.05299">SmolVLM: Redefining small and efficient multimodal models</a>. arXiv:2504.05299, 2025.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-1-openvla-ko"><span>처음으로</span>1. OpenVLA: 로봇 행동을 단어처럼 예측하기</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>

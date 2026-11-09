@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en" data-part="smol">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SmolVLA: The same idea on a small budget</title>
+<meta name="description" content="Part 4 of a four-part series on VLA architectures. How SmolVLA keeps π0's flow matching while redesigning the VLM, the action expert, and the execution system to be small, plus a comparison of the four models.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="SmolVLA: The same idea on a small budget">
+<meta property="og:description" content="Part 4 of a four-part series on VLA architectures. How SmolVLA keeps π0's flow matching while redesigning the VLM, the action expert, and the execution system to be small, plus a comparison of the four models.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-4-smolvla">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-4-smolvla-en.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="SmolVLA: The same idea on a small budget (VLA Architecture Series)">
+<meta property="article:published_time" content="2026-11-09">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="SmolVLA">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="SmolVLA: The same idea on a small budget">
+<meta name="twitter:description" content="Part 4 of a four-part series on VLA architectures. How SmolVLA keeps π0's flow matching while redesigning the VLM, the action expert, and the execution system to be small, plus a comparison of the four models.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-4-smolvla-en.png">
+<meta name="twitter:image:alt" content="SmolVLA: The same idea on a small budget (VLA Architecture Series)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">Paper</span>
+  <a href="https://arxiv.org/abs/2506.01844">SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics</a>
+  <span class="id">arXiv:2506.01844</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>SmolVLA</h1>
+  <p class="sub">The same idea on a small budget</p>
+  <p class="meta">VLA Architecture Series, Part 4 of 4, November 2026</p>
+  <ul class="series" aria-label="Series">
+    <li><a href="/posts/research/vla-1-openvla">1. OpenVLA</a></li>
+    <li><a href="/posts/research/vla-2-openvla-oft">2. OpenVLA-OFT</a></li>
+    <li><a href="/posts/research/vla-3-pi0">3. π0</a></li>
+    <li><span class="now">4. SmolVLA</span></li>
+    <li class="lang"><a href="/posts/research/vla-4-smolvla-ko" lang="ko">한국어</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">If you understand π0, SmolVLA is much easier, because the principle is the same: a VLM and an action expert, with flow matching producing an action chunk. What differs is the constraint. The whole model has 450 million parameters and has to run on a single consumer GPU.</p>
+
+<p>That does not make it π0 with the VLM swapped for a smaller one. The VLM, the action expert, and the way the two are connected are all different, and the execution system that runs after training was designed separately.</p>
+
+<nav class="toc" aria-label="Table of contents">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#s1">Architecture</a></li>
+    <li><a href="#s2">How It Got Small</a></li>
+    <li><a href="#s3">The Connection: Cross-Attention</a></li>
+    <li><a href="#s4">Asynchronous Inference</a></li>
+    <li><a href="#s5">Community Data</a></li>
+    <li><a href="#s6">Results and Limitations</a></li>
+    <li><a href="#s7">The Four Models in One Table</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>Architecture</h2>
+
+<figure>
+<div class="pipe">
+  <div class="row"><div class="b">Images<small>512×512, 64 tokens per frame</small></div><div class="b">Language</div><div class="b">Robot state<small>1 token</small></div></div>
+  <div class="a">↓</div>
+  <div class="b">SmolVLM-2<small>SigLIP + SmolLM2, <b>frozen (not trained)</b>, only the first 16 layers used</small></div>
+  <div class="a">↓ linear layer projects to the expert dimension</div>
+  <div class="b hot">Flow transformer (action expert)<small>about 100 million parameters, alternating cross-attention and causal self-attention</small></div>
+  <div class="a">↓ 10-step integration</div>
+  <div class="b out">Action chunk<small>\(n=50\)</small></div>
+</div>
+<figcaption><b>Figure 1.</b> The SmolVLA architecture. VLM features enter the action expert as Key and Value.</figcaption>
+</figure>
+
+<p>One design decision matters here. The VLM is frozen and <b>only the action expert is trained</b>. This differs from π0, which trains the VLM as well, and it is worth comparing with the OpenVLA experiment in Part 1, where freezing the vision encoder hurt performance badly. Of the roughly 450 million total parameters, about 100 million are actually trained.</p>
+
+<p>The flow matching principle is the same as in Part 3. The time τ is sampled from a Beta distribution, following π0, and inference is fixed at 10 steps. In the loss ablation, the LIBERO average is 80.25 for flow matching and 75.25 for L1 regression, so flow matching did better in this setup.</p>
+
+<div class="note"><p><b class="tag">Note</b>The paper writes both \(A^\tau=\tau A+(1-\tau)\epsilon\) and the target \(u=\epsilon-A\). Differentiating that expression gives \(dA^\tau/d\tau=A-\epsilon\), which has the opposite sign from the target. The paper alone does not settle which convention was used, so if you need to work with an implementation, it is best to check the time direction in the code.</p></div>
+
+<h2 id="s2"><span class="n">2</span>How It Got Small</h2>
+
+<p>Parameter count and compute are separate matters. Fewer parameters means less weight memory, and fewer tokens means less attention computation. SmolVLA works on both.</p>
+
+<figure class="anim" data-anim="shrink"></figure>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>What was reduced</th><th>How</th></tr></thead>
+<tbody>
+<tr><td>VLM size</td><td>SmolVLM-2 instead of PaliGemma at about 3B</td></tr>
+<tr><td>Visual tokens</td><td>No tiling, one global image + pixel shuffle, 64 tokens per frame</td></tr>
+<tr><td>VLM layers</td><td>Only the first 16 layers, half of the total (\(N=L/2\))</td></tr>
+<tr><td>Expert width</td><td>0.75 times the VLM hidden size \(d\)</td></tr>
+</tbody></table></div>
+
+<p>When the hidden dimension is halved, the size of the attention weight matrices scales roughly with the square and drops to about 1/4. That does not mean the whole model shrinks by the same amount, but it does explain why reducing width is effective.</p>
+
+<h3>VLM or Action Expert: Where to Spend the Budget</h3>
+
+<p>Shrinking each one costs something different. A smaller VLM may miss relations such as "pick up the red cup behind the blue cup," which can weaken its understanding of <b>what to do</b>. A smaller action expert may know where the cup is but be less able to express <b>how to move</b>, such as wrist pose and gripper timing.</p>
+
+<p>The LIBERO ablations in the paper give a few hints on this question.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Variable</th><th class="num">Values</th><th class="num">LIBERO average (%)</th></tr></thead>
+<tbody>
+<tr><td>VLM layers N</td><td class="num">8 / 16 / 24 / 32</td><td class="num">75.0 / 78.5 / 79.5 / 80.3</td></tr>
+<tr><td>Expert width (×d)</td><td class="num">1.00 / 0.75 / 0.50 / 0.25</td><td class="num">82.3 / 77.5 / 80.3 / 73.8</td></tr>
+<tr><td>Chunk size n</td><td class="num">1 / 10 / 30 / 50 / 100</td><td class="num">50.0 / 84.0 / 78.5 / 80.3 / 74.5</td></tr>
+</tbody></table></div>
+<p class="cap">Paper Tables 8, 9, 12. These ablations froze the VLM and trained from scratch.</p>
+
+<p>In this setup, raising N from 8 to 32 changes the result by only about 5 points. The width values are not monotonic, and the default of 0.75 scores below both 1.00 and 0.50. A chunk size of 10 also scores higher than the default of 50. These are simulation results from a small sample, and it is hard to draw a general conclusion for either side, but "do we really need a large VLM?" remains a question that has to be answered by experiment. It would be useful to compare different splits of the same total parameter budget between the VLM and the expert.</p>
+
+<h2 id="s3"><span class="n">3</span>The Connection: Cross-Attention</h2>
+
+<p>In π0 from Part 3, the VLM tokens and the action expert tokens met in the self-attention of a single transformer. SmolVLA is different. The action expert produces the Query, and the two are connected through cross-attention that uses the VLM features as Key and Value. The VLM strictly becomes the side that provides conditioning, which helps with reuse and compute optimization.</p>
+
+<p>Inside the action expert, each block uses either cross-attention (CA) or self-attention (SA). SA uses a causal mask, so each action token sees only the earlier tokens in the chunk. This is what distinguishes it from π0's bidirectional attention. The paper explains that this SA makes chunks smoother.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Attention configuration</th><th class="num">LIBERO average (%)</th></tr></thead>
+<tbody>
+<tr><td>CA only</td><td class="num">79.0</td></tr>
+<tr><td>SA only</td><td class="num">74.5</td></tr>
+<tr class="mine"><td>Alternating CA + SA</td><td class="num">85.5</td></tr>
+</tbody></table></div>
+<p class="cap">Table 6. In a separate comparison, causal SA scored 74.5 and bidirectional SA scored 67.5 (Table 7).</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Aspect</th><th>π0</th><th>SmolVLA</th></tr></thead>
+<tbody>
+<tr><td>VLM</td><td>PaliGemma, trained jointly</td><td>SmolVLM-2, frozen</td></tr>
+<tr><td>Action expert</td><td>About 300M transformer</td><td>About 100M transformer</td></tr>
+<tr><td>Coupling</td><td>Joint self-attention</td><td>Cross-attention</td></tr>
+<tr><td>Among action tokens</td><td>Bidirectional</td><td>Causal</td></tr>
+<tr><td>Action generation</td><td>Flow matching, 10 steps</td><td>Flow matching, 10 steps</td></tr>
+<tr><td>Execution</td><td>Periodic re-inference</td><td>Synchronous or asynchronous</td></tr>
+</tbody></table></div>
+
+<h2 id="s4"><span class="n">4</span>Asynchronous Inference</h2>
+
+<p>If the next chunk is computed only after the whole current chunk has been executed, the robot stops until inference finishes. SmolVLA separates execution from inference. The RobotClient pulls actions from a queue and executes them, while a PolicyServer, which may be remote, computes new chunks.</p>
+
+<figure class="anim" data-anim="async"></figure>
+
+<p>When the fraction left in the queue falls below a threshold \(g\), a new observation is sent.</p>
+
+$$\frac{|\mathcal A_t|}{n}<g$$
+
+<p>For a new chunk to arrive before the queue runs out, the following is required. \(\Delta t\) is the control period, which is 33 ms at 30 fps.</p>
+
+$$g\ge\frac{\mathbb E[\ell_S]/\Delta t}{n}$$
+
+<p>With \(g=0\) execution is fully sequential, \(g=0.7\) is the paper's asynchronous example, and with \(g=1\) an observation is sent at every timestep. Similar observations are filtered out by joint-space distance, and a new chunk is merged with the overlapping part of the existing chunk.</p>
+
+<p>Asynchronous execution is not a learning algorithm. It is a system design for running a trained policy. It also has a cost. The robot keeps moving while the next chunk is computed, so the observation used for inference becomes stale, and chunks can conflict with each other.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Metric</th><th class="num">Synchronous</th><th class="num">Asynchronous</th></tr></thead>
+<tbody>
+<tr><td>Total time for 10 runs</td><td class="num">137.5 s</td><td class="num">97.0 s</td></tr>
+<tr><td>Cubes picked and placed in 60 s</td><td class="num">9</td><td class="num">19</td></tr>
+<tr><td>Average success rate</td><td class="num">78.3%</td><td class="num">73.3%</td></tr>
+<tr><td>Sorting success rate</td><td class="num">70%</td><td class="num">50%</td></tr>
+</tbody></table></div>
+<p class="cap">Paper Figure 5. Speed clearly improved, but the success rate dropped on Sorting. The paper's main real-world result (78.3) was measured with synchronous execution.</p>
+
+<h2 id="s5"><span class="n">5</span>Community Data</h2>
+
+<p>SmolVLA's pretraining is based on SO-100 data published on Hugging Face: 481 datasets, 22.9K episodes, and 10.6 million frames. Unlike lab data, the labels are messy, so preprocessing was necessary.</p>
+
+<ul>
+<li><b>Task descriptions:</b> Useless labels such as "Hold", "Up", and "task desc" were rewritten with Qwen2.5-VL-3B-Instruct, which was shown sampled frames.</li>
+<li><b>Camera names:</b> Names that differed across datasets were standardized by mapping them by hand to top, wrist, and side.</li>
+</ul>
+
+<p>The effect was large. The SO-100 average success rate rose from 40% for single-task training without pretraining, to 51.7% for multi-task training without pretraining, to 78.3% with community pretraining. Pretraining ran for 200,000 steps with AdamW and a cosine learning rate, and used 4 GPUs for large batches.</p>
+
+<h2 id="s6"><span class="n">6</span>Results and Limitations</h2>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Method</th><th class="num">Parameters</th><th class="num">LIBERO</th><th class="num">Meta-World</th></tr></thead>
+<tbody>
+<tr class="mine"><td>SmolVLA</td><td class="num">0.45B</td><td class="num">87.3</td><td class="num">57.3</td></tr>
+<tr><td>π0</td><td class="num">3.3–3.5B</td><td class="num">86.0</td><td class="num">47.9</td></tr>
+<tr><td>OpenVLA</td><td class="num">7B</td><td class="num">76.5</td><td class="num">–</td></tr>
+<tr><td>Octo</td><td class="num">0.09B</td><td class="num">75.1</td><td class="num">–</td></tr>
+<tr><td>Diffusion Policy</td><td class="num">–</td><td class="num">72.4</td><td class="num">10.5</td></tr>
+</tbody></table></div>
+<p class="cap">Table 2, average success rate (%). Some of the comparison numbers come from other papers, so a single number cannot settle which method is better. The paper reports that training is about 40% faster than π0 and uses 6 times less memory.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Real robot (SO-100, %)</th><th class="num">Pick-Place</th><th class="num">Stacking</th><th class="num">Sorting</th><th class="num">Average</th></tr></thead>
+<tbody>
+<tr class="mine"><td>SmolVLA 0.45B (multi-task)</td><td class="num">75</td><td class="num">90</td><td class="num">70</td><td class="num">78.3</td></tr>
+<tr><td>π0 3.5B (multi-task)</td><td class="num">100</td><td class="num">40</td><td class="num">45</td><td class="num">61.7</td></tr>
+<tr><td>ACT (single-task)</td><td class="num">70</td><td class="num">50</td><td class="num">25</td><td class="num">48.3</td></tr>
+</tbody></table></div>
+<p class="cap">Table 3. Values include partial scores. π0 is highest on Pick-Place at 100, so the picture varies by task.</p>
+
+<p>This does not mean a small model is always better than a large one. The paper states these limitations.</p>
+
+<ul>
+<li>Pretraining is limited to SO-100 data, so generalization to other robots has not been verified.</li>
+<li>There are about 23,000 trajectories, far fewer than OpenVLA's roughly 1 million.</li>
+<li>The VLM used was pretrained mainly on documents and OCR.</li>
+<li>Tasks that need long-horizon planning are still weak.</li>
+</ul>
+
+<h2 id="s7"><span class="n">7</span>The Four Models in One Table</h2>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>OpenVLA</th><th>OpenVLA-OFT</th><th>π0</th><th>SmolVLA</th></tr></thead>
+<tbody>
+<tr><td>Scale</td><td>7B</td><td>7B + head</td><td>3.3B</td><td>0.45B</td></tr>
+<tr><td>Action representation</td><td>Discrete tokens (256 bins)</td><td>Continuous</td><td>Continuous</td><td>Continuous</td></tr>
+<tr><td>Generation</td><td>Autoregressive</td><td>Single parallel pass</td><td>Flow, 10 steps</td><td>Flow, 10 steps</td></tr>
+<tr><td>Loss</td><td>Cross-entropy</td><td>L1</td><td>Velocity MSE</td><td>Velocity MSE</td></tr>
+<tr><td>VLM connection</td><td>VLM outputs directly</td><td>Action position embeddings + MLP</td><td>Joint self-attention</td><td>Cross-attention</td></tr>
+<tr><td>Robot state input</td><td>No</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Chunk</td><td>None (single timestep)</td><td>8 / 25</td><td>50</td><td>50</td></tr>
+</tbody></table></div>
+
+<p>The terms from these four posts fall into three categories.</p>
+
+<ul>
+<li><b>Techniques for understanding information:</b> VLM, transformer, attention, attention mask.</li>
+<li><b>Techniques for generating and learning actions:</b> action expert, regression, flow matching, action chunk, loss.</li>
+<li><b>Techniques for running fast:</b> caching, asynchronous inference, replanning.</li>
+</ul>
+
+<p>When reading a new VLA paper, start by finding which of these it changed. After working through the four posts, three questions remain.</p>
+
+<ol>
+<li>How much does the way VLM information is passed to the action expert, that is, the coupling strength, affect performance and cost?</li>
+<li>How often are multimodal actions needed? In other words, where is the boundary between direct regression and flow matching?</li>
+<li>How should the same parameter budget be divided between visual and language understanding and action generation?</li>
+</ol>
+
+<p>None of these is a matter of comparing how intelligent the models are. They are questions of how to connect networks and where to spend computation when given the same information.</p>
+
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li>Shukor, Aubakirova, Capuano et al. <a href="https://arxiv.org/abs/2506.01844">SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics</a>. arXiv:2506.01844, 2025.</li>
+<li>Marafioti et al. <a href="https://arxiv.org/abs/2504.05299">SmolVLM: Redefining small and efficient multimodal models</a>. arXiv:2504.05299, 2025.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-1-openvla"><span>Back to the start</span>1. OpenVLA: Predicting Robot Actions Like Words</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>
