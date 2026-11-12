@@ -28,6 +28,7 @@ Profiles: https://scholar.google.com/citations?user=BZ0tnSsAAAAJ · https://gith
 
 ## Research notes
 
+- [GR00T N1: A System That Thinks and a System That Moves (VLA Series Bonus)](https://www.devsangho.com/posts/research/vla-5-groot): A bonus part of the VLA architecture series. How GR00T N1 splits a VLM (System 2) from an action model (System 1), runs them at different rates, and trains one model across different robot bodies and unlabeled video.
 - [SmolVLA: The Same Idea on a Small Budget (VLA Series 4/4)](https://www.devsangho.com/posts/research/vla-4-smolvla): Part 4 of a four-part series on VLA architectures. How SmolVLA keeps flow matching while shrinking the VLM, the action expert and the execution system, plus a comparison of all four models.
 - [π0: Learning Directions Instead of Actions (VLA Series 3/4)](https://www.devsangho.com/posts/research/vla-3-pi0): Part 3 of a four-part series on VLA architectures. How π0 couples a VLM with an action expert through attention, generates action chunks with flow matching, and uses masking and caching.
 - [OpenVLA-OFT: Predicting Actions All at Once (VLA Series 2/4)](https://www.devsangho.com/posts/research/vla-2-openvla-oft): Part 2 of a four-part series on VLA architectures. How parallel decoding, action chunking and continuous regression made OpenVLA fast, and what each change contributed.

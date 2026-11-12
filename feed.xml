@@ -9,9 +9,18 @@
             <link>https://www.devsangho.com</link>
         </image>
         <generator>RSS for Node</generator>
-        <lastBuildDate>Mon, 09 Nov 2026 00:58:39 GMT</lastBuildDate>
+        <lastBuildDate>Thu, 12 Nov 2026 00:48:01 GMT</lastBuildDate>
         <atom:link href="https://www.devsangho.com/feed.xml" rel="self" type="application/rss+xml"/>
         <language><![CDATA[en]]></language>
+        <item>
+            <title><![CDATA[GR00T N1: A System That Thinks and a System That Moves (VLA Series Bonus)]]></title>
+            <description><![CDATA[A bonus part of the VLA architecture series. How GR00T N1 splits a VLM (System 2) from an action model (System 1), runs them at different rates, and trains one model across different robot bodies and unlabeled video.]]></description>
+            <link>https://www.devsangho.com/posts/research/vla-5-groot</link>
+            <guid isPermaLink="true">https://www.devsangho.com/posts/research/vla-5-groot</guid>
+            <category><![CDATA[vla]]></category>
+            <category><![CDATA[groot]]></category>
+            <pubDate>Thu, 12 Nov 2026 00:00:00 GMT</pubDate>
+        </item>
         <item>
             <title><![CDATA[SmolVLA: The Same Idea on a Small Budget (VLA Series 4/4)]]></title>
             <description><![CDATA[Part 4 of a four-part series on VLA architectures. How SmolVLA keeps flow matching while shrinking the VLM, the action expert and the execution system, plus a comparison of all four models.]]></description>

@@ -59,6 +59,20 @@
   --blue:#5EDB94; --green:#D4E157; --orange:#FFA07A; --hl:#5EDB94; --hl-soft:rgba(94,219,148,.12);
   --blue-soft:rgba(94,219,148,.13); --green-soft:rgba(212,225,87,.12); color-scheme:dark;}
 
+:root[data-part="groot"]{
+  --paper:#FDF5FF; --card:#FFFFFF; --ink:#2A1630; --ink-2:#6E5878; --rule:#EEDDF2;
+  --blue:#A21CAF; --green:#0369A1; --orange:#C2410C; --hl:#C026D3; --hl-soft:rgba(192,38,211,.12);
+  --blue-soft:rgba(162,28,175,.10); --green-soft:rgba(3,105,161,.11); --h1:clamp(64px,14vw,160px);
+}
+@media (prefers-color-scheme:dark){:root[data-part="groot"]:not([data-theme="light"]){
+  --paper:#150A19; --card:#211226; --ink:#FBEFFD; --ink-2:#C5A9CC; --rule:#3F2546;
+  --blue:#E879F9; --green:#38BDF8; --orange:#FB923C; --hl:#E879F9; --hl-soft:rgba(232,121,249,.12);
+  --blue-soft:rgba(232,121,249,.13); --green-soft:rgba(56,189,248,.12); color-scheme:dark;}}
+:root[data-part="groot"][data-theme="dark"]{
+  --paper:#150A19; --card:#211226; --ink:#FBEFFD; --ink-2:#C5A9CC; --rule:#3F2546;
+  --blue:#E879F9; --green:#38BDF8; --orange:#FB923C; --hl:#E879F9; --hl-soft:rgba(232,121,249,.12);
+  --blue-soft:rgba(232,121,249,.13); --green-soft:rgba(56,189,248,.12); color-scheme:dark;}
+
 /* ---------- The shared design ---------- */
 :root[data-part]{--grid:transparent; --anim-rx:14}
 [data-part] .paper{position:absolute;left:0;right:0;top:0;z-index:2;background:none;border:0}

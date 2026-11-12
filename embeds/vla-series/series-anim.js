@@ -546,6 +546,158 @@
         },
       };
     })(),
+
+    // Bonus: System 2 re-reads the scene at 10 Hz, System 1 acts at 120 Hz.
+    clock: {
+      h: 236, dur: 10.5,
+      title: T('느린 이해, 빠른 움직임', 'Slow understanding, fast motion'),
+      draw(t) {
+        const ms = seg(t, 0.6, 8.6) * 500, x = (m) => 40 + (m / 500) * 460;
+        const reads = ms > 0 ? Math.min(5, Math.floor(ms / 100) + 1) : 0;
+        const acts = ms > 0 ? Math.min(60, Math.floor((ms * 120) / 1000) + 1) : 0;
+        let s = X(40, 28, 'System 2 · VLM · 10 Hz', { s: 14, a: 'start', w: 700, f: BLUE });
+        s += X(500, 28, T(`읽기 ${reads}회`, `${reads} reads`), { s: 14, a: 'end', w: 700, f: BLUE });
+        s += X(40, 126, T('System 1 · 행동 · 120 Hz', 'System 1 · actions · 120 Hz'), { s: 14, a: 'start', w: 700, f: GREEN });
+        s += X(500, 126, T(`행동 ${acts}개`, `${acts} actions`), { s: 14, a: 'end', w: 700, f: GREEN });
+        for (let k = 0; k < 5; k++) {
+          const m = k * 100;
+          if (ms > m) s += B(x(m) + 2, 40, x(100) - x(0) - 6, 34, T('다시 읽기', 're-read'), { f: BS, s: BLUE, size: 12.5 });
+        }
+        for (let k = 0; k < 60; k++) { const m = (k * 1000) / 120; if (ms > m) s += L(x(m), 140, x(m), 172, GREEN, 2.2); }
+        s += L(40, 192, 500, 192, RULE, 1.5);
+        for (let k = 0; k <= 5; k++) s += X(x(k * 100), 212, k * 100 + ' ms', { s: 12, f: INK2 });
+        if (ms > 0 && ms < 500) s += L(x(ms), 36, x(ms), 180, INK, 1.5, 0.7);
+        return {
+          svg: s,
+          step: pick(t, [
+            [0, T('GR00T N1은 이해와 움직임을 다른 속도로 돌린다. 0.5초 동안을 따라가 보자.', 'GR00T N1 runs understanding and motion at different speeds. Follow half a second.')],
+            [0.8, T('System 2(VLM)는 0.1초마다 카메라 이미지와 명령을 다시 읽는다. 논문 기준으로 L40 GPU에서 10Hz다.', 'System 2, the VLM, re-reads the camera image and the instruction every 0.1 s. That is 10 Hz on an L40 GPU in the paper.')],
+            [3.6, T('System 1은 그 사이에도 초당 120개의 속도로 행동을 내놓는다.', 'In between, System 1 keeps producing actions at 120 per second.')],
+            [8.6, T('0.5초 동안 장면은 다섯 번 읽고, 행동은 60개를 낸다. 느린 이해와 빠른 움직임을 나눈 설계다.', 'In half a second it reads the scene five times and emits sixty actions. Slow understanding and fast motion are split apart.')],
+          ]),
+        };
+      },
+    },
+
+    // Bonus: pi0 pairs layers, GR00T hands over one set of VLM tokens.
+    couple: {
+      h: 290, dur: 13,
+      title: T('VLM과 행동 모델이 만나는 위치', 'Where the VLM meets the action model'),
+      draw(t) {
+        const ly = (i) => 58 + i * 46, lh = 32;
+        let s = X(130, 26, 'π0', { s: 16, w: 800 }) + X(390, 26, 'GR00T N1', { s: 16, w: 800 });
+        s += L(260, 14, 260, 282, RULE, 1.5);
+        for (let i = 0; i < 4; i++) {
+          const a = 0.6 + i * 0.7, on = t >= a;
+          s += B(22, ly(i), 86, lh, T(`VLM ${i + 1}층`, `VLM L${i + 1}`), { f: on ? BS : PAPER, s: on ? BLUE : RULE, size: 13 });
+          s += B(150, ly(i), 86, lh, T(`행동 ${i + 1}층`, `action L${i + 1}`), { f: on ? GS : PAPER, s: on ? GREEN : RULE, size: 13 });
+          if (on) s += A(110, ly(i) + lh / 2, 147, ly(i) + lh / 2, BLUE, 2, seg(t, a, a + 0.4));
+        }
+        s += X(130, 266, T('층마다 같은 깊이의 VLM을 읽는다', 'each layer reads the VLM at the same depth'), { s: 12.5, f: INK2 });
+        const v0 = 3.6, d0 = 6.4;
+        for (let i = 0; i < 4; i++) {
+          const on = t >= v0 + i * 0.5;
+          s += B(272, ly(i), 70, lh, `VLM ${i + 1}`, { f: on ? BS : PAPER, s: on ? BLUE : RULE, size: 13 });
+        }
+        const mem = t >= v0 + 2.1;
+        s += R(354, 126, 62, 66, mem ? BS : PAPER, mem ? BLUE : RULE, 1, RX, mem ? '' : '4 4');
+        s += X(385, 154, T('넘긴', 'handed'), { s: 12, f: mem ? INK : INK2 }) + X(385, 170, T('토큰', 'tokens'), { s: 12, f: mem ? INK : INK2 });
+        if (mem) s += A(342, ly(3) + lh / 2, 356, 194, BLUE, 1.8, seg(t, v0 + 2.1, v0 + 2.5));
+        for (let i = 0; i < 4; i++) {
+          const ca = i % 2 === 0, a = d0 + i * 0.7, on = t >= a;
+          s += B(428, ly(i), 80, lh, ca ? 'Cross-attn' : 'Self-attn', { f: on ? GS : PAPER, s: on ? GREEN : RULE, size: 12.5 });
+          if (ca && on) s += A(416, 159, 427, ly(i) + lh / 2, BLUE, 1.8, seg(t, a, a + 0.4));
+        }
+        s += X(390, 266, T('cross-attn 층이 모두 같은 토큰을 읽는다', 'every cross-attn layer reads the same tokens'), { s: 12.5, f: INK2 });
+        return {
+          svg: s,
+          step: pick(t, [
+            [0, T('π0: 가중치는 따로지만 두 쪽이 한 트랜스포머 안에 있다. 층마다 행동 토큰이 같은 층의 VLM 토큰을 attention으로 읽는다.', 'π0: separate weights, one transformer. At every layer the action tokens attend to the VLM tokens of that same layer.')],
+            [3.6, T('GR00T N1: VLM이 먼저 계산을 끝낸다. 마지막 층이 아니라 LLM의 12번째 층 출력을 넘긴다.', 'GR00T N1: the VLM finishes first, and hands over the output of LLM layer 12 rather than the last layer.')],
+            [6.4, T('System 1의 DiT는 cross-attention 층에서 넘겨받은 토큰을 Key와 Value로 읽고, self-attention 층에서는 행동 토큰과 로봇 상태끼리 본다.', 'System 1, a DiT, reads those tokens as Keys and Values in its cross-attention layers, and attends among action and state tokens in its self-attention layers.')],
+            [9.8, T('비유하면 π0는 두 전문가가 같은 회의에 앉은 구조이고, GR00T는 정리된 자료를 넘겨받는 구조다.', 'Put simply, π0 seats both experts in one meeting, while GR00T hands one of them a finished brief.')],
+          ]),
+        };
+      },
+    },
+
+    // Bonus: one shared DiT, small per-body adapters around it.
+    embody: {
+      h: 270, dur: 13.6,
+      title: T('몸이 달라도 같은 System 1', 'One System 1 for different bodies'),
+      draw(t) {
+        const list = ko
+          ? [['단일 팔 로봇', '관절과 그리퍼'], ['양팔 로봇', '팔 두 개의 관절'], ['휴머노이드 GR-1', '팔, 손, 허리'], ['사람 영상', '행동 라벨 없음, 잠재 행동으로 대신']]
+          : [['Single-arm robot', 'joints and gripper'], ['Bimanual robot', 'two arms of joints'], ['GR-1 humanoid', 'arms, hands and waist'], ['Human video', 'no action labels, latent actions instead']];
+        const cols = [[BLUE, BS], [GREEN, GS], [ORANGE, 'none'], [BLUE, BS]];
+        const k = clamp(Math.floor(t / 3.2), 0, 3), u = t - k * 3.2, sl = seg(u, 0.1, 0.8), [c, cs] = cols[k];
+        let s = X(260, 30, list[k][0], { s: 18, w: 800 }) + X(260, 54, list[k][1], { s: 13, f: INK2 });
+        s += B(194, 104, 132, 76, T('공유 DiT', 'Shared DiT'), { s: INK2, size: 15 });
+        s += X(260, 202, T('모든 몸의 데이터로 함께 학습', 'trained on every body together'), { s: 12.5, f: INK2 });
+        const ex = lerp(-130, 30, sl), dx = lerp(530, 370, sl);
+        s += B(ex, 92, 124, 38, T('상태 인코더', 'state encoder'), { f: cs, s: c, size: 13 });
+        s += B(ex, 146, 124, 38, T('행동 인코더', 'action encoder'), { f: cs, s: c, size: 13 });
+        s += B(dx, 123, 124, 38, T('행동 디코더', 'action decoder'), { f: cs, s: c, size: 13 });
+        if (sl >= 1) s += A(156, 111, 192, 130, c, 1.8) + A(156, 165, 192, 154, c, 1.8) + A(328, 142, 368, 142, c, 1.8);
+        s += X(260, 246, T('바뀌는 것은 바깥의 작은 MLP뿐', 'only the small MLPs outside change'), { s: 13.5, w: 600, f: c });
+        return {
+          svg: s,
+          step: pick(t, [
+            [0, T('System 1의 가운데인 DiT는 모든 로봇이 함께 쓴다. 로봇마다 따로 두는 것은 바깥의 인코더와 디코더다.', 'The DiT at the core of System 1 is shared by every robot. Only the encoders and decoder around it are per robot.')],
+            [3.2, T('양팔 로봇은 상태와 행동의 차원이 다르다. 작은 MLP만 바꿔 끼우면 같은 DiT를 쓴다.', 'A bimanual robot has different state and action dimensions. Swapping the small MLPs lets it use the same DiT.')],
+            [6.4, T('휴머노이드도 마찬가지다. π0처럼 큰 차원으로 0을 채워 맞추는 대신, 몸마다 투영층을 둔다.', 'The humanoid works the same way. Instead of zero-padding to one large size as π0 does, each body gets its own projection.')],
+            [9.6, T('행동 라벨이 없는 사람 영상에는 잠재 행동을 붙여, 하나의 "몸"처럼 취급한다.', 'Human video has no action labels, so it gets latent actions and is treated as one more "body".')],
+          ]),
+        };
+      },
+    },
+
+    // Bonus: the data pyramid, latent actions and neural trajectories.
+    pyramid: {
+      h: 300, dur: 14.5,
+      title: T('데이터 피라미드', 'The data pyramid'),
+      draw(t) {
+        const hw = (y) => 34 + ((y - 30) / 240) * 100, cx = 140;
+        const lv = ko
+          ? [['실제 로봇 데이터', 190, 270, BLUE], ['시뮬레이션 · 생성 영상', 110, 190, GREEN], ['웹 데이터 · 사람 영상', 30, 110, ORANGE]]
+          : [['Real robot data', 190, 270, BLUE], ['Simulation · neural video', 110, 190, GREEN], ['Web data · human video', 30, 110, ORANGE]];
+        let s = '';
+        // Bottom is the widest: draw the pyramid upside down in data terms, base = web.
+        const tiers = [[lv[2], 190, 270], [lv[1], 110, 190], [lv[0], 30, 110]];
+        tiers.forEach(([[name, , , col], y1, y2], i) => {
+          const o = seg(t, 0.3 + i * 0.7, 0.9 + i * 0.7);
+          s += `<path d="M${cx - hw(y1)} ${y1}L${cx + hw(y1)} ${y1}L${cx + hw(y2)} ${y2}L${cx - hw(y2)} ${y2}Z" fill="${col}" opacity="${0.18 * o}" stroke="${col}" stroke-width="1.4" stroke-opacity="${o}"/>`;
+          s += X(cx, (y1 + y2) / 2 + 5, name, { s: 13, w: 600, o });
+        });
+        s += X(cx, 292, T('위로 갈수록 양은 적고 로봇에 특화', 'scarcer and more robot-specific toward the top'), { s: 12, f: INK2 });
+        const o2 = seg(t, 3.6, 4.4);
+        if (t >= 3.6) {
+          s += X(290, 36, T('라벨 없는 영상 → 잠재 행동', 'unlabeled video → latent actions'), { s: 13.5, a: 'start', w: 700, o: o2 });
+          s += B(290, 50, 56, 40, 'x', { o: o2, size: 14 }) + B(352, 50, 56, 40, 'x+H', { o: o2, size: 13 });
+          s += A(410, 70, 430, 70, INK2, 1.6, o2) + B(432, 50, 72, 40, 'VQ-VAE', { f: BS, s: BLUE, o: o2, size: 13 });
+          const o3 = seg(t, 5.2, 5.9);
+          s += A(468, 92, 468, 112, BLUE, 1.6, o3) + B(398, 114, 106, 36, T('잠재 행동 z', 'latent action z'), { f: GS, s: GREEN, o: o3, size: 13 });
+        }
+        if (t >= 8.4) {
+          const o4 = seg(t, 8.4, 9.1), g = seg(t, 9.4, 11.8), W = 200 / 827.3;
+          s += X(290, 186, T('생성 영상으로 데이터 늘리기', 'growing data with generated video'), { s: 13.5, a: 'start', w: 700, o: o4 });
+          s += X(290, 214, T('실제 원격조작', 'real teleop'), { s: 12.5, a: 'start', f: INK2, o: o4 });
+          s += `<rect x="290" y="220" width="${88.4 * W}" height="14" rx="3" fill="${BLUE}" opacity="${o4}"/>` + X(296 + 88.4 * W, 232, T('88시간', '88 h'), { s: 12.5, a: 'start', w: 700, o: o4 });
+          s += X(290, 258, T('신경망 궤적', 'neural trajectories'), { s: 12.5, a: 'start', f: INK2, o: o4 });
+          s += `<rect x="290" y="264" width="${Math.max(1, 827.3 * W * g)}" height="14" rx="3" fill="${GREEN}" opacity="${o4}"/>`;
+          if (g > 0.05) s += X(500, 258, T(`${Math.round(88 + (827 - 88) * g)}시간`, `${Math.round(88 + (827 - 88) * g)} h`), { s: 12.5, a: 'end', w: 700 });
+        }
+        return {
+          svg: s,
+          step: pick(t, [
+            [0, T('GR00T N1은 데이터를 세 층으로 쌓는다. 아래는 양이 많고 범용적이며, 위로 갈수록 적고 로봇에 특화된다.', 'GR00T N1 stacks data in three tiers. The base is large and general; toward the top it gets scarcer and more robot-specific.')],
+            [3.6, T('사람 영상에는 행동 라벨이 없다. 두 프레임 사이의 변화를 VQ-VAE로 압축한 "잠재 행동"을 라벨로 쓴다.', 'Human video has no action labels. The change between two frames, compressed by a VQ-VAE, becomes a "latent action" label.')],
+            [8.4, T('실제 GR-1 원격조작 약 88시간을 영상 생성 모델로 불려 약 827시간의 "신경망 궤적"을 만들었다.', 'About 88 hours of real GR-1 teleoperation were expanded by a video generation model into about 827 hours of "neural trajectories".')],
+            [12, T('생성 영상의 행동은 잠재 행동이나, 두 프레임에서 행동을 추정하는 역동역학 모델(IDM)로 붙인다.', 'Actions for the generated videos come from latent actions or from an inverse dynamics model that infers actions from two frames.')],
+          ]),
+        };
+      },
+    },
   };
 
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

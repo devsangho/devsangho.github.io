@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en" data-part="groot">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GR00T N1: A system that thinks and a system that moves</title>
+<meta name="description" content="A bonus part of the VLA architecture series. Notes on how GR00T N1 splits a VLM (System 2) from an action model (System 1), runs them at different rates, and trains one model on robots with different bodies and even on unlabeled video.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sangho Yun">
+<meta property="og:title" content="GR00T N1: A system that thinks and a system that moves">
+<meta property="og:description" content="A bonus part of the VLA architecture series. Notes on how GR00T N1 splits a VLM (System 2) from an action model (System 1), runs them at different rates, and trains one model on robots with different bodies and even on unlabeled video.">
+<meta property="og:url" content="https://www.devsangho.com/posts/research/vla-5-groot">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:image" content="https://www.devsangho.com/images/og/vla-5-groot-en.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="GR00T N1: A system that thinks and a system that moves (VLA Architecture Series)">
+<meta property="article:published_time" content="2026-11-12">
+<meta property="article:author" content="Sangho Yun">
+<meta property="article:section" content="Research">
+<meta property="article:tag" content="VLA">
+<meta property="article:tag" content="GR00T">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@devsangho">
+<meta name="twitter:creator" content="@devsangho">
+<meta name="twitter:title" content="GR00T N1: A system that thinks and a system that moves">
+<meta name="twitter:description" content="A bonus part of the VLA architecture series. Notes on how GR00T N1 splits a VLM (System 2) from an action model (System 1), runs them at different rates, and trains one model on robots with different bodies and even on unlabeled video.">
+<meta name="twitter:image" content="https://www.devsangho.com/images/og/vla-5-groot-en.png">
+<meta name="twitter:image:alt" content="GR00T N1: A system that thinks and a system that moves (VLA Architecture Series)">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="/embeds/vla-series/series.css">
+<link rel="stylesheet" href="/embeds/vla-series/series-themes.css">
+</head>
+<body>
+
+<div class="paper"><div class="paper-inner">
+  <span class="lbl">Paper</span>
+  <a href="https://arxiv.org/abs/2503.14734">GR00T N1: An Open Foundation Model for Generalist Humanoid Robots</a>
+  <span class="id">arXiv:2503.14734</span>
+</div></div>
+
+<header class="hero"><div class="hero-inner">
+  <h1>GR00T N1</h1>
+  <p class="sub">A system that thinks and a system that moves</p>
+  <p class="meta">VLA Architecture Series, Bonus, November 2026</p>
+  <ul class="series" aria-label="Series">
+    <li><a href="/posts/research/vla-1-openvla">1. OpenVLA</a></li>
+    <li><a href="/posts/research/vla-2-openvla-oft">2. OpenVLA-OFT</a></li>
+    <li><a href="/posts/research/vla-3-pi0">3. π0</a></li>
+    <li><a href="/posts/research/vla-4-smolvla">4. SmolVLA</a></li>
+    <li><span class="now">Bonus: GR00T N1</span></li>
+    <li class="lang"><a href="/posts/research/vla-5-groot-ko" lang="ko">한국어</a></li>
+  </ul>
+</div></header>
+
+<main>
+
+<p class="lead">One question ran through all four parts of the series: in what form does the VLM pass what it understood about the scene to the action model? GR00T N1 is a general-purpose humanoid model released by NVIDIA, and it gives a different answer to that question than π0 does.</p>
+
+<p>That is why it gets its own bonus part. The principle for generating actions is the same flow matching as in Part 3. What changes is how the two networks are connected, the rates at which they run, and how the data is collected. I checked the architecture and the numbers against the original paper.</p>
+
+<nav class="toc" aria-label="Table of contents">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#s1">The problem: humanoids have no data</a></li>
+    <li><a href="#s2">Two systems: System 2 and System 1</a></li>
+    <li><a href="#s3">How it differs from π0: where they meet</a></li>
+    <li><a href="#s4">One model for different bodies</a></li>
+    <li><a href="#s5">The data pyramid</a></li>
+    <li><a href="#s6">Training and inference</a></li>
+    <li><a href="#s7">Results</a></li>
+    <li><a href="#s8">The five models in one table</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>The problem: humanoids have no data</h2>
+
+<p>Language models are pretrained on internet-scale text. Humanoid robots have no such data. The paper says the data that can be collected on a single piece of hardware is "orders of magnitude" smaller than what is needed.</p>
+
+<p>One option is to combine data from many robots. OpenVLA in Part 1 did this with Open X-Embodiment. But each robot has a different body, different sensors, and a different action space, so the result is less a single dataset than a set of separate "data islands." Data collected directly on real humanoids is expensive.</p>
+
+<p>GR00T N1 answers in two ways. It builds a model architecture that can take in different bodies and even unlabeled video, and it fills the shortage of robot data with simulation and generated video. Sections 2 to 4 below cover the model, and Section 5 covers the data.</p>
+
+<h2 id="s2"><span class="n">2</span>Two systems: System 2 and System 1</h2>
+
+<p>GR00T N1 is split into System 2, which handles understanding, and System 1, which handles action. The names come from the analogy that divides human thinking into a slow, deliberate system and a fast, intuitive one.</p>
+
+<figure>
+<div class="pipe">
+  <div class="row"><div class="b">Image<small>224×224, 64 tokens per frame</small></div><div class="b">Language instruction</div></div>
+  <div class="a">↓</div>
+  <div class="b hot">System 2: Eagle-2 VLM<small>SigLIP-2 + SmolLM2, 1.34B, uses the output of LLM layer 12</small></div>
+  <div class="a">↓ passes vision and language tokens</div>
+  <div class="b hot">System 1: DiT<small>alternating cross-attention and self-attention, flow matching</small></div>
+  <div class="a">↑ projected by a per-body MLP</div>
+  <div class="row"><div class="b">Robot state</div><div class="b">Noisy action + time τ</div></div>
+  <div class="a">↓ per-body MLP decoder</div>
+  <div class="b out">Action chunk<small>\(H=16\)</small></div>
+</div>
+<figcaption><b>Figure 1.</b> The architecture of GR00T-N1-2B. Of the 2.2B total parameters, 1.34B are in the VLM.</figcaption>
+</figure>
+
+<p>System 2 is NVIDIA's Eagle-2 VLM. The image encoder is SigLIP-2 and the language model is SmolLM2. This is the same language model family as SmolVLM-2, which SmolVLA used in Part 4, and it also uses pixel shuffle to reduce each image to 64 tokens per frame.</p>
+
+<p>One choice stands out. Instead of the VLM's last layer, it passes the output of the LLM's 12th layer to System 1. The paper says middle-layer features gave both faster inference and higher success rates than the last layer, but it does not publish the numbers for this comparison. It is an observation in the same direction as SmolVLA using only the first half of the VLM.</p>
+
+<p>The two systems run at different rates. According to the paper, on an L40 GPU System 2 reads the scene at 10Hz and System 1 outputs actions at 120Hz.</p>
+
+<figure class="anim" data-anim="clock"></figure>
+
+<div class="fix"><p><b class="tag">Correction</b>Because System 1 is a Diffusion Transformer (DiT), it is easy to assume it uses a different generative method from the flow matching in Part 3. DiT is the name of a network architecture, and flow matching is the objective used to train that network. They are concepts at different levels, and GR00T N1 trains a DiT architecture with flow matching.</p></div>
+
+<p>In the DiT, the flow time τ enters through adaptive layer normalization (AdaLN). τ is used to produce the scale and shift of the normalization layers, which modulate the features. It is the same idea as FiLM, which OFT used in Part 2 to modulate visual features with language.</p>
+
+<h2 id="s3"><span class="n">3</span>How it differs from π0: where they meet</h2>
+
+<p>π0 and GR00T N1 both use a VLM plus a separate action transformer, and both generate action chunks with flow matching. The overall frame is the same. The difference is where the two networks meet.</p>
+
+<figure class="anim" data-anim="couple"></figure>
+
+<p>As we saw in Part 3, π0 puts the tokens from both sets of weights inside the self-attention of a single transformer, so at every layer the action tokens read the VLM representation from the same layer. In GR00T N1, the VLM finishes its computation first, and the cross-attention layers of System 1 read the resulting tokens as Keys and Values. From the side of the action tokens, the formula is the same.</p>
+
+$$H_A'=\operatorname{softmax}\!\left(\frac{Q_A K_{VL}^\top}{\sqrt d}\right)V_{VL}$$
+
+<p>What changes is where \(K_{VL}, V_{VL}\) come from. In π0, each layer of the action transformer gets them from the same layer of the VLM. In GR00T N1, the single output of layer 12 is shared by all the cross-attention layers.</p>
+
+<div class="fix"><p><b class="tag">Correction</b>Saying "GR00T summarizes the VLM information into a single vector and passes it on" is an oversimplification. What gets passed is many image and language tokens, and System 1 reads selectively from them through attention. The difference is not whether the information is compressed but which depth of representation is read, and through which path.</p></div>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>π0</th><th>SmolVLA</th><th>GR00T N1</th></tr></thead>
+<tbody>
+<tr><td>Connection</td><td>Joint self-attention</td><td>cross-attention</td><td>cross-attention</td></tr>
+<tr><td>VLM representation read</td><td>Same depth at each layer</td><td>Layers in the first half</td><td>Layer 12 only</td></tr>
+<tr><td>Action model</td><td>About 300M</td><td>About 100M</td><td>About 0.86B (total minus the VLM)</td></tr>
+<tr><td>Chunk length</td><td>50</td><td>50</td><td>16</td></tr>
+<tr><td>Integration steps</td><td>10</td><td>10</td><td>4</td></tr>
+</tbody></table></div>
+<p class="cap">The size of GR00T's action model is computed from the paper's 2.2B and 1.34B. The three models differ in both data and robots, so this table alone cannot decide which connection method is better.</p>
+
+<p>There are trade-offs one can expect from the architecture. The joint design can use fine-grained visual information directly at every layer while generating actions. The separated design makes it easier to optimize the two modules separately and run them at different rates, but the representation it receives has to carry enough of the information the action needs. Which one is better has to be checked with an experiment that keeps the same VLM, the same action model, and the same data and changes only the connection method. This is exactly the "coupling strength" question left open at the end of the four-part series.</p>
+
+<h2 id="s4"><span class="n">4</span>One model for different bodies</h2>
+
+<p>A single arm, two arms, and a humanoid all have different state and action dimensions. π0 in Part 3 padded everything to the largest size, 18 dimensions, filling the rest with zeros. GR00T N1 places small per-body MLPs outside System 1.</p>
+
+<figure class="anim" data-anim="embody"></figure>
+
+<p>A state encoder and an action encoder project each robot's values into a shared dimension, and an action decoder turns the last \(H\) tokens back into that robot's actions. As in π0, the action encoder also takes the flow time τ. The DiT in the middle is shared by all bodies.</p>
+
+<p>This design also lets human videos without action labels into training. They are labeled with the latent actions covered in the next section and treated as one more body, called "LAPA."</p>
+
+<h2 id="s5"><span class="n">5</span>The data pyramid</h2>
+
+<p>Now that the model can take in varied data, the next step is to stack up the data. The paper draws this as a pyramid. The base is web data and human video, the middle is simulation and generated video, and the top is real robot data.</p>
+
+<figure class="anim" data-anim="pyramid"></figure>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Category</th><th class="num">Hours</th><th class="num">Frames</th></tr></thead>
+<tbody>
+<tr><td>Real robot</td><td class="num">3,288.8</td><td class="num">262.3M</td></tr>
+<tr><td>Human video</td><td class="num">2,517.0</td><td class="num">181.3M</td></tr>
+<tr><td>Simulation</td><td class="num">1,742.6</td><td class="num">125.5M</td></tr>
+<tr><td>Neural trajectories (generated video)</td><td class="num">827.3</td><td class="num">23.8M</td></tr>
+<tr class="mine"><td>Total</td><td class="num">8,375.7</td><td class="num">592.9M</td></tr>
+</tbody></table></div>
+<p class="cap">Table 7 of the paper, pretraining data. Besides 88.4 hours of GR-1 teleoperation, the real robot data includes public datasets such as DROID, Bridge-v2, and AgiBot-Alpha.</p>
+
+<h3>Adding actions to unlabeled video</h3>
+
+<p>Human video and generated video have no robot actions. The paper creates labels in two ways.</p>
+
+<ul>
+<li><b>Latent actions (LAPA):</b> The current frame and the frame \(H\) steps later are compressed with a VQ-VAE, and the embedding that represents the change between them is used in place of the action.</li>
+<li><b>Inverse dynamics model (IDM):</b> A separate model is trained to look at two frames and estimate the action chunk between them, and it is used to attach pseudo-actions.</li>
+</ul>
+
+<h3>Generating data</h3>
+
+<p>In simulation, DexMimicGen expanded a few dozen demonstrations into tens of thousands. Pretraining used 10,000 demonstrations for each of 54 combinations, 540,000 demonstrations in total. On the generated video side, the video generation model WAN2.1 was LoRA fine-tuned on real data, turning about 88 hours of GR-1 teleoperation into about 827 hours of video.</p>
+
+<p>The effect was confirmed. On RoboCasa, adding neural trajectories raised success rates by 4.2, 8.8, and 6.8 points with 30, 100, and 300 demonstrations respectively, and on 8 tasks with the real GR-1 the average rose by 5.8 points. As for the labeling method, latent actions were slightly better when demonstrations were few, and IDM pulled ahead at 100 or more.</p>
+
+<h2 id="s6"><span class="n">6</span>Training and inference</h2>
+
+<p>The flow matching formula has the same form as π0 in Part 3, and the time τ is also sampled from the same Beta distribution as π0 (\(s=0.999\)).</p>
+
+$$A^\tau=\tau A+(1-\tau)\epsilon,\qquad \mathcal L=\big\|V_\theta(\phi_t,A^\tau,q_t)-(\epsilon-A)\big\|^2$$
+
+<div class="note"><p><b class="tag">Note</b>This has the same notation problem as SmolVLA in Part 4. Taken as written, \(dA^\tau/d\tau=A-\epsilon\), which has the opposite sign from the target. The paper alone does not settle the time-direction convention, so if you implement it, it is best to check in the code.</p></div>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Item</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Integration steps</td><td>4 (10 for π0 and SmolVLA)</td></tr>
+<tr><td>Latency</td><td>63.9ms to generate a chunk of 16 actions (L40, bf16)</td></tr>
+<tr><td>Auxiliary loss</td><td>A detection loss for locating the target object, trained jointly</td></tr>
+<tr><td>Pretraining</td><td>About 50,000 H100 hours, up to 1,024 GPUs for a single model, 200,000 steps at batch size 16,384</td></tr>
+<tr><td>Post-training</td><td>Language side frozen and the rest trained, 60,000 steps at a default batch size of 1,024</td></tr>
+</tbody></table></div>
+<p class="cap">The paper does not state whether the 63.9ms includes the VLM computation.</p>
+
+<h2 id="s7"><span class="n">7</span>Results</h2>
+
+<p>One point first. The paper's baselines are BC-Transformer and Diffusion Policy, and there are no results compared under the same conditions as π0 or OpenVLA. It is hard to put these numbers next to those of the previous four parts and say which is better.</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Method</th><th class="num">RoboCasa</th><th class="num">DexMG</th><th class="num">GR-1</th><th class="num">Average</th></tr></thead>
+<tbody>
+<tr><td>BC-Transformer</td><td class="num">26.3</td><td class="num">53.9</td><td class="num">16.1</td><td class="num">26.4</td></tr>
+<tr><td>Diffusion Policy</td><td class="num">25.6</td><td class="num">56.1</td><td class="num">32.7</td><td class="num">33.4</td></tr>
+<tr class="mine"><td>GR00T-N1-2B</td><td class="num">32.1</td><td class="num">66.5</td><td class="num">50.0</td><td class="num">45.0</td></tr>
+</tbody></table></div>
+<p class="cap">Table 2 of the paper, simulation success rate (%), 100 demonstrations per task. The average is weighted by the number of tasks in the three benchmarks (24, 9, 24).</p>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Real GR-1 (%)</th><th class="num">Pick and place</th><th class="num">Articulated objects</th><th class="num">Industrial</th><th class="num">Coordination</th><th class="num">Average</th></tr></thead>
+<tbody>
+<tr><td>Diffusion Policy (10% of data)</td><td class="num">3.0</td><td class="num">14.3</td><td class="num">6.7</td><td class="num">27.5</td><td class="num">10.2</td></tr>
+<tr><td>Diffusion Policy (full)</td><td class="num">36.0</td><td class="num">38.6</td><td class="num">61.0</td><td class="num">62.5</td><td class="num">46.4</td></tr>
+<tr><td>GR00T N1 (10% of data)</td><td class="num">35.0</td><td class="num">62.0</td><td class="num">31.0</td><td class="num">50.0</td><td class="num">42.6</td></tr>
+<tr class="mine"><td>GR00T N1 (full)</td><td class="num">82.0</td><td class="num">70.9</td><td class="num">70.0</td><td class="num">82.5</td><td class="num">76.8</td></tr>
+</tbody></table></div>
+<p class="cap">Table 3 of the paper. The average is over 13 tasks. GR00T trained on 10% of the data is 3.8 points away from Diffusion Policy trained on the full data.</p>
+
+<p>The less data there is, the larger the effect of pretraining. Varying the number of demonstrations in simulation across 30, 100, and 300, GR00T mostly comes out ahead, but on the GR-1 benchmark it was actually slightly lower at 300 (49.3%) than at 100 (50.0%). The paper does not explain this separately.</p>
+
+<h2 id="s8"><span class="n">8</span>The five models in one table</h2>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>OpenVLA</th><th>OFT</th><th>π0</th><th>SmolVLA</th><th>GR00T N1</th></tr></thead>
+<tbody>
+<tr><td>Size</td><td>7B</td><td>7B + head</td><td>3.3B</td><td>0.45B</td><td>2.2B</td></tr>
+<tr><td>Generation</td><td>Autoregressive</td><td>One parallel pass</td><td>flow, 10 steps</td><td>flow, 10 steps</td><td>flow, 4 steps</td></tr>
+<tr><td>VLM connection</td><td>VLM outputs directly</td><td>Action position embeddings + MLP</td><td>Joint self-attention</td><td>cross-attention</td><td>cross-attention (layer 12)</td></tr>
+<tr><td>Chunk</td><td>None</td><td>8 / 25</td><td>50</td><td>50</td><td>16</td></tr>
+<tr><td>Handling other bodies</td><td>Mainly single arm</td><td>Fine-tuning</td><td>18-dim padding</td><td>Mainly SO-100</td><td>Per-body MLP</td></tr>
+</tbody></table></div>
+
+<p>What GR00T N1 shows most clearly among the five models is that "the model architecture and the data strategy are designed together." The per-body MLPs and latent actions are what let human video and generated video into training, and that data is what makes it possible to pretrain a 2.2B model for humanoids.</p>
+
+<p>The limitations the paper states are also clear. The evaluation focuses on short tabletop manipulation, and long tasks that combine locomotion and manipulation are left for future work. Synthetic data does not yet capture enough diverse counterfactual situations and physics. Later versions such as N1.5 are now used as baselines in other work, but this post covers only N1, which has an original paper.</p>
+
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li>NVIDIA (Bjorck et al.). <a href="https://arxiv.org/abs/2503.14734">GR00T N1: An Open Foundation Model for Generalist Humanoid Robots</a>. arXiv:2503.14734, 2025.</li>
+<li>Li et al. <a href="https://arxiv.org/abs/2501.14818">Eagle 2: Building Post-Training Data Strategies from Scratch for Frontier Vision-Language Models</a>. arXiv:2501.14818, 2025.</li>
+<li>Peebles, Xie. <a href="https://arxiv.org/abs/2212.09748">Scalable Diffusion Models with Transformers</a>. arXiv:2212.09748, 2022.</li>
+<li>Ye et al. <a href="https://arxiv.org/abs/2410.11758">Latent Action Pretraining from Videos</a>. arXiv:2410.11758, 2024.</li>
+<li>Jiang et al. <a href="https://arxiv.org/abs/2410.24185">DexMimicGen: Automated Data Generation for Bimanual Dexterous Manipulation via Imitation Learning</a>. arXiv:2410.24185, 2024.</li>
+<li>Alayrac et al. <a href="https://arxiv.org/abs/2204.14198">Flamingo: a Visual Language Model for Few-Shot Learning</a>. arXiv:2204.14198, 2022.</li>
+</ol>
+
+<a class="next" href="/posts/research/vla-1-openvla"><span>Back to the start</span>1. OpenVLA: Predicting robot actions like words</a>
+
+</main>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false})"></script>
+<script defer src="/embeds/vla-series/series-anim.js"></script>
+</body>
+</html>
