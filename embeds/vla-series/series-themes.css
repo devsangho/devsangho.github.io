@@ -101,3 +101,15 @@
 [data-part] table.mask td.y{background:var(--blue-soft)}
 [data-part] .anim button{border-radius:99px}
 @media (max-width:560px){[data-part] .hero .sub{font-size:20px}[data-part] h2{font-size:24px}}
+
+/* OpenTex banner across the top of every series post. The paper bar is
+   absolutely positioned over the hero; top:auto keeps it below the banner. */
+.promo{display:flex;justify-content:center;align-items:baseline;flex-wrap:wrap;gap:2px 10px;padding:9px 16px;background:var(--ink);color:var(--paper);font-size:14px;line-height:1.5;text-align:center;text-decoration:none}
+.promo b{font-weight:700}
+.promo span{opacity:.82}
+.promo i{font-style:normal;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.promo:hover i{opacity:.85}
+.promo:focus-visible{outline:2px solid var(--blue);outline-offset:-4px}
+[data-part] .promo + .paper{top:auto}
+.promo .sm{display:none}
+@media (max-width:560px){.promo .lg{display:none}.promo .sm{display:inline}}
